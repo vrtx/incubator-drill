@@ -27,6 +27,7 @@ import org.apache.drill.exec.physical.base.FragmentRoot;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.base.Scan;
 import org.apache.drill.exec.physical.config.Filter;
+import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.physical.config.MockScanBatchCreator;
 import org.apache.drill.exec.physical.config.MockScanPOP;
 import org.apache.drill.exec.physical.config.Project;
@@ -48,6 +49,7 @@ public class ImplCreator extends AbstractPhysicalVisitor<RecordBatch, FragmentCo
   private MockScanBatchCreator msc = new MockScanBatchCreator();
   private ScreenCreator sc = new ScreenCreator();
   private RandomReceiverCreator rrc = new RandomReceiverCreator();
+  private HashSenderCreator hsc = new HashSenderCreator();
   private SingleSenderCreator ssc = new SingleSenderCreator();
   private ProjectBatchCreator pbc = new ProjectBatchCreator();
   private FilterBatchCreator fbc = new FilterBatchCreator();
@@ -92,6 +94,12 @@ public class ImplCreator extends AbstractPhysicalVisitor<RecordBatch, FragmentCo
   public RecordBatch visitScreen(Screen op, FragmentContext context) throws ExecutionSetupException {
     Preconditions.checkArgument(root == null);
     root = sc.getRoot(context, op, getChildren(op, context));
+    return null;
+  }
+
+  @Override
+  public RecordBatch visitHashPartitionSender(HashPartitionSender op, FragmentContext context) throws ExecutionSetupException {
+    root = hsc.getRoot(context, op, getChildren(op, context));
     return null;
   }
   
