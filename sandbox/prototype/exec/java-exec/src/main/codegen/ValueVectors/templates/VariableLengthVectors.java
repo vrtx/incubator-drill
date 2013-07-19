@@ -19,7 +19,10 @@ import org.apache.drill.exec.proto.SchemaDefProtos;
 import org.apache.drill.exec.proto.UserBitShared.FieldMetadata;
 import org.apache.drill.exec.record.DeadBuf;
 import org.apache.drill.exec.record.MaterializedField;
+import org.apache.drill.exec.record.TransferPair;
 import org.apache.drill.exec.vector.ByteHolder;
+
+import antlr.collections.impl.Vector;
 
 /**
  * ${minor.class}Vector implements a vector of variable width values.  Elements in the vector
@@ -62,22 +65,22 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
    * @return
    */
   public int getVarByteLength(){
-    return offsetVector.getAccessor().get(recordCount); 
+    return offsetVector.getAccessor().get(valueCount); 
   }
   
   @Override
   public FieldMetadata getMetadata() {
-    int len = recordCount * ${type.width} + getVarByteLength();
+    int len = valueCount * ${type.width} + getVarByteLength();
     return FieldMetadata.newBuilder()
              .setDef(getField().getDef())
-             .setValueCount(recordCount)
+             .setValueCount(valueCount)
              .setVarByteLength(getVarByteLength())
              .setBufferLength(len)
              .build();
   }
 
   public int load(int dataBytes, int valueCount, ByteBuf buf){
-    this.recordCount = valueCount;
+    this.valueCount = valueCount;
     int loaded = offsetVector.load(valueCount+1, buf);
     data = buf.slice(loaded, dataBytes);
     data.retain();
@@ -100,6 +103,44 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
   @Override
   public ByteBuf[] getBuffers() {
     return new ByteBuf[]{offsetVector.data, this.data};
+  }
+  
+  public TransferPair getTransferPair(){
+    return new TransferImpl();
+  }
+  
+  public void transferTo(${minor.class}Vector target){
+    this.offsetVector.transferTo(target.offsetVector);
+    target.data = data;
+    target.data.retain();
+    target.valueCount = valueCount;
+    clear();
+  }
+  
+  public void copyValue(int inIndex, int outIndex, ${minor.class}Vector v){
+    int start = offsetVector.data.get${(minor.javaType!type.javaType)?cap_first}(inIndex);
+    int end =   offsetVector.data.get${(minor.javaType!type.javaType)?cap_first}(inIndex+1);
+    int len = end - start;
+    
+    int outputStart = outIndex == 0 ? 0 : v.offsetVector.data.get${(minor.javaType!type.javaType)?cap_first}(outIndex * ${type.width});
+    data.getBytes(start, v.data, outputStart, len);
+    v.offsetVector.data.set${(minor.javaType!type.javaType)?cap_first}( (outIndex+1) * ${type.width}, len);
+  }
+  
+  private class TransferImpl implements TransferPair{
+    ${minor.class}Vector to;
+    
+    public TransferImpl(){
+      this.to = new ${minor.class}Vector(getField(), allocator);
+    }
+    
+    public ${minor.class}Vector getTo(){
+      return to;
+    }
+    
+    public void transfer(){
+      transferTo(to);
+    }
   }
   
   public void allocateNew(int totalBytes, int valueCount) {
@@ -143,8 +184,8 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
       return get(index);
     }
     
-    public int getRecordCount() {
-      return recordCount;
+    public int getValueCount() {
+      return valueCount;
     }
   }
   
@@ -181,10 +222,10 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
       data.setBytes(currentOffset, bb);
     }
 
-    public void setValueCount(int recordCount) {
-      ${minor.class}Vector.this.recordCount = recordCount;
-      data.writerIndex(recordCount * ${type.width});
-      offsetVector.getMutator().setValueCount(recordCount+1);
+    public void setValueCount(int valueCount) {
+      ${minor.class}Vector.this.valueCount = valueCount;
+      data.writerIndex(valueCount * ${type.width});
+      offsetVector.getMutator().setValueCount(valueCount+1);
     }
 
     @Override

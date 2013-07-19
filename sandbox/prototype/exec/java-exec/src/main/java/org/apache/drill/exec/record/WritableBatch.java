@@ -23,84 +23,62 @@ import java.util.List;
 
 import org.apache.drill.exec.proto.UserBitShared.FieldMetadata;
 import org.apache.drill.exec.proto.UserBitShared.RecordBatchDef;
+import org.apache.drill.exec.record.BatchSchema.SelectionVectorMode;
 import org.apache.drill.exec.vector.ValueVector;
 
-import com.carrotsearch.hppc.IntObjectOpenHashMap;
-import com.carrotsearch.hppc.procedures.IntObjectProcedure;
 import com.google.common.collect.Lists;
 
 /**
- * A specialized version of record batch that can moves out buffers and preps them for writing. 
+ * A specialized version of record batch that can moves out buffers and preps them for writing.
  */
 public class WritableBatch {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(WritableBatch.class);
-  
+
   private final RecordBatchDef def;
   private final ByteBuf[] buffers;
-  
-  public WritableBatch(RecordBatchDef def, List<ByteBuf> buffers) {
+
+  private WritableBatch(RecordBatchDef def, List<ByteBuf> buffers) {
     logger.debug("Created new writable batch with def {} and buffers {}", def, buffers);
     this.def = def;
     this.buffers = buffers.toArray(new ByteBuf[buffers.size()]);
   }
-  
-  public WritableBatch(RecordBatchDef def, ByteBuf[] buffers) {
+
+  private WritableBatch(RecordBatchDef def, ByteBuf[] buffers) {
     super();
     this.def = def;
     this.buffers = buffers;
   }
-  
-  
-  public RecordBatchDef getDef(){
+
+  public RecordBatchDef getDef() {
     return def;
   }
-  public ByteBuf[] getBuffers(){
+
+  public ByteBuf[] getBuffers() {
     return buffers;
   }
-  
-//  public static WritableBatch get(ValueVector[] vectors){
-//    WritableCreator c = new WritableCreator();
-//    for(int i =0; i < vectors.length; i++){
-//      c.apply(i, vectors[i]);
-//    }
-//    return c.get();
-//  }
-//  
-  
-  public static WritableBatch get(int recordCount, IntObjectOpenHashMap<ValueVector> fields){
-    WritableCreator creator = new WritableCreator(recordCount);
-    fields.forEach(creator);
-    return creator.get();
-    
-  }
-  
-  private static class WritableCreator implements IntObjectProcedure<ValueVector>{
-    
+
+  public static WritableBatch getBatchNoSV(int recordCount, Iterable<ValueVector> vectors) {
     List<ByteBuf> buffers = Lists.newArrayList();
     List<FieldMetadata> metadata = Lists.newArrayList();
-    private int recordCount;
-    
 
-    public WritableCreator(int recordCount) {
-      super();
-      this.recordCount = recordCount;
-    }
-    
-    @Override
-    public void apply(int key, ValueVector value) {
-      metadata.add(value.getMetadata());
-      for(ByteBuf b : value.getBuffers()){
+    for (ValueVector vv : vectors) {
+      metadata.add(vv.getMetadata());
+      for (ByteBuf b : vv.getBuffers()) {
         buffers.add(b);
         b.retain();
       }
-      value.clear();
+      // remove vv access to buffers.
+      vv.clear();
     }
 
-    public WritableBatch get(){
-      RecordBatchDef batchDef = RecordBatchDef.newBuilder().addAllField(metadata).setRecordCount(recordCount).build();
-      WritableBatch b = new WritableBatch(batchDef, buffers);
-      return b;
-    }
-    
+    RecordBatchDef batchDef = RecordBatchDef.newBuilder().addAllField(metadata).setRecordCount(recordCount).build();
+    WritableBatch b = new WritableBatch(batchDef, buffers);
+    return b;
   }
+  
+  public static WritableBatch get(RecordBatch batch) {
+    if(batch.getSchema() != null && batch.getSchema().getSelectionVector() != SelectionVectorMode.NONE) throw new UnsupportedOperationException("Only batches without selections vectors are writable.");
+    return getBatchNoSV(batch.getRecordCount(), batch);
+  }
+
 }
