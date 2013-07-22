@@ -16,7 +16,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package org.apache.drill.exec.physical.impl;
+package org.apache.drill.exec.physical.impl.hashsender;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -38,6 +38,7 @@ import org.apache.drill.exec.expr.ValueVectorReadExpression;
 import org.apache.drill.exec.expr.ValueVectorWriteExpression;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
+import org.apache.drill.exec.physical.impl.VectorHolder;
 import org.apache.drill.exec.physical.impl.project.Projector;
 import org.apache.drill.exec.proto.SchemaDefProtos.FieldDef;
 import org.apache.drill.exec.proto.SchemaDefProtos.NamePart;
@@ -62,7 +63,7 @@ import com.google.common.collect.Lists;
 public class HashSenderRecordBatch implements RecordBatch {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashSenderRecordBatch.class);
 
-  private final HashPartitionSender pop;
+  private final HashPartitionSender senderOp;
   private final RecordBatch incoming;
   private final FragmentContext context;
   private BatchSchema outSchema;
@@ -71,8 +72,8 @@ public class HashSenderRecordBatch implements RecordBatch {
   private List<ValueVector> outputVectors;
   private VectorHolder vh;
 
-  public HashSenderRecordBatch(HashPartitionSender pop, RecordBatch incoming, FragmentContext context){
-    this.pop = pop;
+  public HashSenderRecordBatch(HashPartitionSender senderOp, RecordBatch incoming, FragmentContext context){
+    this.senderOp = senderOp;
     this.incoming = incoming;
     this.context = context;
   }
@@ -173,14 +174,14 @@ public class HashSenderRecordBatch implements RecordBatch {
     }
     this.outputVectors = Lists.newArrayList();
     this.vh = new VectorHolder(outputVectors);
-    final NamedExpression expr = pop.getExpr();
+    final LogicalExpression expr = senderOp.getExpr();
     final ErrorCollector collector = new ErrorCollectorImpl();
     final List<TransferPair> transfers = Lists.newArrayList();
 
     final CodeGenerator<HashSender> cg = new CodeGenerator<HashSender>(HashSender.TEMPLATE_DEFINITION, context.getFunctionRegistry());
 
-    final LogicalExpression logicalExp = ExpressionTreeMaterializer.materialize(expr.getExpr(), incoming, collector);
-    final MaterializedField outputField = getMaterializedField(expr.getRef(), logicalExp);
+    final LogicalExpression logicalExp = ExpressionTreeMaterializer.materialize(expr, incoming, collector);
+//    final MaterializedField outputField = getMaterializedField(expr.getRef(), logicalExp);
     if(collector.hasErrors()){
       throw new SchemaChangeException(String.format("Failure while trying to materialize incoming schema.  Errors:\n %s.", collector.toErrorString()));
     }
@@ -196,11 +197,11 @@ public class HashSenderRecordBatch implements RecordBatch {
       outputVectors.add(tp.getTo());
     }else{
       // need to do evaluation.
-      ValueVector vector = TypeHelper.getNewVector(outputField, context.getAllocator());
-      allocationVectors.add(vector);
-      outputVectors.add(vector);
-      ValueVectorWriteExpression write = new ValueVectorWriteExpression(outputVectors.size() - 1, logicalExp);
-      cg.addExpr(write);
+//      ValueVector vector = TypeHelper.getNewVector(outputField, context.getAllocator());
+//      allocationVectors.add(vector);
+//      outputVectors.add(vector);
+//      ValueVectorWriteExpression write = new ValueVectorWriteExpression(outputVectors.size() - 1, logicalExp);
+//      cg.addExpr(write);
     }
 
     SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(incoming.getSchema().getSelectionVector());
@@ -228,10 +229,10 @@ public class HashSenderRecordBatch implements RecordBatch {
   }
 
   private FieldDef getFieldDef(SchemaPath path, MajorType type){
-    return FieldDef //
-        .newBuilder() //
-        .addAllName(getNameParts(path.getRootSegment())) //
-        .setMajorType(type) //
+    return FieldDef
+        .newBuilder()
+        .addAllName(getNameParts(path.getRootSegment()))
+        .setMajorType(type)
         .build();
   }
 

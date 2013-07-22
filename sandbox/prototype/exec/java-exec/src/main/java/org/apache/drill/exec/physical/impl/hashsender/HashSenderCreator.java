@@ -16,11 +16,13 @@
  * limitations under the License.
  ******************************************************************************/
 
-package org.apache.drill.exec.physical.impl;
+package org.apache.drill.exec.physical.impl.hashsender;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
+import org.apache.drill.exec.physical.impl.RootCreator;
+import org.apache.drill.exec.physical.impl.RootExec;
 import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 import org.apache.drill.exec.proto.ExecProtos;
 import org.apache.drill.exec.proto.GeneralRPCProtos;

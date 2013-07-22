@@ -27,6 +27,7 @@ public class FunctionImplementationRegistry {
         logger.debug("Unable to initialize function for class {}", clazz.getName());
       }
     }
+    logger.debug("Registering Functions done");
   }
   
   public FunctionHolder getFunction(FunctionCall call){

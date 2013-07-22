@@ -16,7 +16,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package org.apache.drill.exec.physical.impl;
+package org.apache.drill.exec.physical.impl.hashsender;
 
 import java.util.List;
 
