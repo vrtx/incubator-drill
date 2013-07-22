@@ -36,10 +36,10 @@ public class HashPartitionSender extends AbstractSender {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashPartitionSender.class);
 
   private final List<DrillbitEndpoint> endpoints;
-  private final NamedExpression expr;
+  private final LogicalExpression expr;
   
   @JsonCreator
-  public HashPartitionSender(@JsonProperty("receiver-major-fragment") int oppositeMajorFragmentId, @JsonProperty("child") PhysicalOperator child, @JsonProperty("expr") NamedExpression expr, @JsonProperty("destinations") List<DrillbitEndpoint> endpoints) {
+  public HashPartitionSender(@JsonProperty("receiver-major-fragment") int oppositeMajorFragmentId, @JsonProperty("child") PhysicalOperator child, @JsonProperty("expr") LogicalExpression expr, @JsonProperty("destinations") List<DrillbitEndpoint> endpoints) {
     super(oppositeMajorFragmentId, child);
     this.expr = expr;
     this.endpoints = endpoints;
@@ -55,7 +55,7 @@ public class HashPartitionSender extends AbstractSender {
     return new HashPartitionSender(oppositeMajorFragmentId, child, expr, endpoints);
   }
 
-  public NamedExpression getExpr() {
+  public LogicalExpression getExpr() {
     return expr;
   }
   

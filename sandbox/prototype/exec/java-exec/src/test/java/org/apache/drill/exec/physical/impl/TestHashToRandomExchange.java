@@ -48,7 +48,7 @@ public class TestHashToRandomExchange extends PopUnitTestBase {
       bit2.run();
       client.connect();
       List<QueryResultBatch> results = client.runQuery(UserProtos.QueryType.PHYSICAL,
-          Files.toString(FileUtils.getResourceAsFile("/physical_double_exchange.json"),
+          Files.toString(FileUtils.getResourceAsFile("/sender/hash_exchange.json"),
               Charsets.UTF_8));
       int count = 0;
       for(QueryResultBatch b : results) {
