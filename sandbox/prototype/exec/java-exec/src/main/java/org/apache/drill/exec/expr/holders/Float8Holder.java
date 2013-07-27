@@ -9,6 +9,5 @@ public class Float8Holder implements ValueHolder {
   
   public static final MajorType TYPE = Types.required(MinorType.FLOAT8);
   public double value;
-  public int isSet;
   
 }

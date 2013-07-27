@@ -1,3 +1,5 @@
+import java.lang.UnsupportedOperationException;
+
 <@pp.dropOutputFile />
 <#list types as type>
 <#list type.minor as minor>
@@ -262,7 +264,17 @@ public final class Nullable${minor.class}Vector extends BaseValueVector implemen
     }
     
     public void randomizeData(){
+      <#if minor.class == "Float8">
+      // TODO: testing.  Need generalized way of creating random nullable and repeated vectors
+      if (values.data != DeadBuf.DEAD_BUFFER) {
+        Random r = new Random();
+        for(int i =0; i < bits.getValueCapacity(); i++){
+          set(i, r.nextDouble());
+        }
+      }
+      <#else>
       throw new UnsupportedOperationException();
+      </#if>
     }
     
     public void reset(){

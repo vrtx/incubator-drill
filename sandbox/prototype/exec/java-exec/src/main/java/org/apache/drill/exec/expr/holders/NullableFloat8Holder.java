@@ -9,5 +9,6 @@ public class NullableFloat8Holder implements ValueHolder{
   
   public static final MajorType TYPE = Types.optional(MinorType.FLOAT8);
   public double value;
+  public int isSet;
   
 }

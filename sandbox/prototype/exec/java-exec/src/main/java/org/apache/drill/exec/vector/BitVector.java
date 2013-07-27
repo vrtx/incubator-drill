@@ -9,13 +9,12 @@ import org.apache.drill.exec.proto.UserBitShared.FieldMetadata;
 import org.apache.drill.exec.record.DeadBuf;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.TransferPair;
+
 /**
  * Bit implements a vector of bit-width values.  Elements in the vector are accessed
  * by position from the logical start of the vector.
  *   The width of each element is 1 bit.
  *   The equivalent Java primitive is an int containing the value '0' or '1'.
- *
- * NB: this class is automatically generated from ValueVectorTypes.tdd using FreeMarker.
  */
 public final class BitVector extends BaseDataValueVector implements FixedWidthVector{
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BitVector.class);
@@ -30,7 +29,7 @@ public final class BitVector extends BaseDataValueVector implements FixedWidthVe
   }
 
   private int getSizeFromCount(int valueCount) {
-    return (int) Math.ceil(valueCount / 8);
+    return (int) Math.ceil((float)valueCount / 8);
   }
   
   /**
@@ -41,9 +40,10 @@ public final class BitVector extends BaseDataValueVector implements FixedWidthVe
   public void allocateNew(int valueCount) {
     clear();
     valueCapacity = valueCount;
+    this.valueCount = valueCount;
     int valueSize = getSizeFromCount(valueCount);
     data = allocator.buffer(valueSize);
-    for (int i = 0; i < getSizeFromCount(valueCount); i++) {
+    for (int i = 0; i < valueSize; i++) {
       data.setByte(i, 0);
     }
   }
