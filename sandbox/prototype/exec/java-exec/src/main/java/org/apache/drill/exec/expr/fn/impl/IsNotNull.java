@@ -26,8 +26,8 @@ import org.apache.drill.exec.expr.annotations.Param;
 import org.apache.drill.exec.expr.holders.*;
 import org.apache.drill.exec.record.RecordBatch;
 
-@FunctionTemplate(name = "isNull", scope = FunctionTemplate.FunctionScope.SIMPLE)
-public class IsNull implements DrillFunc {
+@FunctionTemplate(name = "isNotNull", scope = FunctionTemplate.FunctionScope.SIMPLE)
+public class IsNotNull implements DrillFunc {
 
   @Param NullableFloat8Holder input;
   @Output BooleanHolder out;
@@ -35,7 +35,7 @@ public class IsNull implements DrillFunc {
   public void setup(RecordBatch incoming) { }
 
   public void eval() {
-    out.value = (input.isSet == 0 ? 1 : 0);
+    out.value = (input.isSet == 0 ? 0 : 1);
   }
 
   public static class Provider implements CallProvider {
@@ -43,7 +43,7 @@ public class IsNull implements DrillFunc {
     @Override
     public FunctionDefinition[] getFunctionDefintions() {
       return new FunctionDefinition[] {
-          FunctionDefinition.simple("isNull", new ArgumentValidators.AnyTypeAllowed(1), OutputTypeDeterminer.FIXED_BOOLEAN, "isnull")
+          FunctionDefinition.simple("isNotNull", new ArgumentValidators.AnyTypeAllowed(1), OutputTypeDeterminer.FIXED_BOOLEAN, "isnotnull")
       };
     }
 

@@ -47,8 +47,8 @@ public class TestSimpleFunctions {
   DrillConfig c = DrillConfig.create();
 
   @Test
-  public void testFunctions(@Injectable final DrillbitContext bitContext,
-                            @Injectable UserServer.UserClientConnection connection) throws Throwable{
+  public void testIsNull(@Injectable final DrillbitContext bitContext,
+                         @Injectable UserServer.UserClientConnection connection) throws Throwable {
 
     new NonStrictExpectations(){{
       bitContext.getMetrics(); result = new MetricRegistry("test");
@@ -56,7 +56,7 @@ public class TestSimpleFunctions {
     }};
 
     PhysicalPlanReader reader = new PhysicalPlanReader(c, c.getMapper(), CoordinationProtos.DrillbitEndpoint.getDefaultInstance());
-    PhysicalPlan plan = reader.readPhysicalPlan(Files.toString(FileUtils.getResourceAsFile("/functions/test1.json"), Charsets.UTF_8));
+    PhysicalPlan plan = reader.readPhysicalPlan(Files.toString(FileUtils.getResourceAsFile("/functions/testIsNull.json"), Charsets.UTF_8));
     FunctionImplementationRegistry registry = new FunctionImplementationRegistry(c);
     FragmentContext context = new FragmentContext(bitContext, ExecProtos.FragmentHandle.getDefaultInstance(), connection, null, registry);
     SimpleRootExec exec = new SimpleRootExec(ImplCreator.getExec(context, (FragmentRoot) plan.getSortedOperators(false).iterator().next()));
@@ -72,6 +72,34 @@ public class TestSimpleFunctions {
     assertTrue(!context.isFailed());
 
   }
+
+  @Test
+  public void testIsNotNull(@Injectable final DrillbitContext bitContext,
+                            @Injectable UserServer.UserClientConnection connection) throws Throwable{
+
+    new NonStrictExpectations(){{
+      bitContext.getMetrics(); result = new MetricRegistry("test");
+      bitContext.getAllocator(); result = BufferAllocator.getAllocator(c);
+    }};
+
+    PhysicalPlanReader reader = new PhysicalPlanReader(c, c.getMapper(), CoordinationProtos.DrillbitEndpoint.getDefaultInstance());
+    PhysicalPlan plan = reader.readPhysicalPlan(Files.toString(FileUtils.getResourceAsFile("/functions/testIsNotNull.json"), Charsets.UTF_8));
+    FunctionImplementationRegistry registry = new FunctionImplementationRegistry(c);
+    FragmentContext context = new FragmentContext(bitContext, ExecProtos.FragmentHandle.getDefaultInstance(), connection, null, registry);
+    SimpleRootExec exec = new SimpleRootExec(ImplCreator.getExec(context, (FragmentRoot) plan.getSortedOperators(false).iterator().next()));
+
+    while(exec.next()){
+      assertEquals(50, exec.getSelectionVector2().getCount());
+    }
+
+    if(context.getFailureCause() != null){
+      throw context.getFailureCause();
+    }
+
+    assertTrue(!context.isFailed());
+
+  }
+
 
   @After
   public void tearDown() throws Exception{
