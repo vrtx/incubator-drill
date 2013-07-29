@@ -268,7 +268,7 @@ public final class Nullable${minor.class}Vector extends BaseValueVector implemen
       // TODO: testing.  Need generalized way of creating random nullable and repeated vectors
       if (values.data != DeadBuf.DEAD_BUFFER) {
         Random r = new Random();
-        for(int i =0; i < bits.getValueCapacity(); i++){
+        for(int i =0; i < bits.getValueCapacity(); i += 2){
           set(i, r.nextDouble());
         }
       }
