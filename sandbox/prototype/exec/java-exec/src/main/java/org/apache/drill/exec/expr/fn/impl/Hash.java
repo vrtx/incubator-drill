@@ -20,22 +20,20 @@ package org.apache.drill.exec.expr.fn.impl;
 
 import org.apache.drill.common.expression.*;
 import org.apache.drill.common.types.TypeProtos;
-import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.types.Types;
 import org.apache.drill.exec.expr.DrillFunc;
 import org.apache.drill.exec.expr.annotations.FunctionTemplate;
 import org.apache.drill.exec.expr.annotations.FunctionTemplate.FunctionScope;
 import org.apache.drill.exec.expr.annotations.Output;
 import org.apache.drill.exec.expr.annotations.Param;
-import org.apache.drill.exec.expr.annotations.Workspace;
-import org.apache.drill.exec.expr.holders.LongHolder;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.vector.BigIntHolder;
 
 @FunctionTemplate(name = "hash", scope = FunctionScope.SIMPLE, nulls = FunctionTemplate.NullHandling.NULL_IF_NULL)
 public class Hash implements DrillFunc {
 
-  @Param LongHolder in;
-  @Output LongHolder out;
+  @Param BigIntHolder in;
+  @Output BigIntHolder out;
 
   public void setup(RecordBatch incoming) {
   }

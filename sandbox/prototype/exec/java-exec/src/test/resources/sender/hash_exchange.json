@@ -26,9 +26,9 @@
         },
         {
             @id:2,
+            child: 1,
             pop: "hash-to-random-exchange",
-            expr: "hash(123)",
-            child: 1
+            expr: "hash(123)"
         },
         {
             @id:3,
@@ -38,18 +38,13 @@
             selectivity: 0.8
         },
         {
-            @id: 4,
+            @id:4,
             child: 3,
-            pop: "mock-store"
-        },
-        {
-            @id:5,
-            child: 4,
             pop: "union-exchange"
         },
         {
-            @id: 6,
-            child: 5,
+            @id: 5,
+            child: 4,
             pop: "screen"
         }
     ]
