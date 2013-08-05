@@ -28,23 +28,27 @@
             @id:2,
             child: 1,
             pop: "hash-to-random-exchange",
-            expr: "hash(123)"
+            expr: "hash(red)"
         },
         {
             @id:3,
             child: 2,
             pop:"filter",
-            expr: "blue > 5",
-            selectivity: 0.8
+            expr: "alternate()"
         },
         {
             @id:4,
             child: 3,
+            pop:"selection-vector-remover"
+        },
+        {
+            @id:5,
+            child: 4,
             pop: "union-exchange"
         },
         {
-            @id: 5,
-            child: 4,
+            @id: 6,
+            child: 5,
             pop: "screen"
         }
     ]

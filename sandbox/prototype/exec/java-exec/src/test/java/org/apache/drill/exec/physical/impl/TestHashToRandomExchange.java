@@ -55,7 +55,7 @@ public class TestHashToRandomExchange extends PopUnitTestBase {
         System.out.println("Got result batch: " + b);
         count += b.getHeader().getRowCount();
       }
-      assertEquals(200, count);
+      assertEquals(100, count);
     }
   }
 

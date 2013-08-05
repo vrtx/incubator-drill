@@ -28,19 +28,21 @@ import org.apache.drill.exec.expr.annotations.Output;
 import org.apache.drill.exec.expr.annotations.Param;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.vector.BigIntHolder;
+import org.apache.drill.exec.vector.IntHolder;
+import org.apache.drill.exec.vector.VarCharHolder;
 
 @FunctionTemplate(name = "hash", scope = FunctionScope.SIMPLE, nulls = FunctionTemplate.NullHandling.NULL_IF_NULL)
 public class Hash implements DrillFunc {
 
   @Param BigIntHolder in;
-  @Output BigIntHolder out;
+  @Output IntHolder out;
 
   public void setup(RecordBatch incoming) {
   }
 
   public void eval() {
     // TODO: implement actual hash function (e.g. murmur3), on multiple input types.
-    out.value = in.value % 100;
+    out.value = (int)in.value;
   }
 
   public static class Provider implements CallProvider{
@@ -48,9 +50,10 @@ public class Hash implements DrillFunc {
     @Override
     public FunctionDefinition[] getFunctionDefintions() {
       return new FunctionDefinition[] {
-          FunctionDefinition.simple("hash", new ArgumentValidators.AnyTypeAllowed(1),
-                                            new OutputTypeDeterminer.FixedType(Types.required(TypeProtos.MinorType.BIGINT)),
-                                            "hash")
+          FunctionDefinition.simple("hash",
+                                    new ArgumentValidators.AnyTypeAllowed(1),
+                                    OutputTypeDeterminer.FIXED_INT,
+                                    "hash")
       };
     }
 

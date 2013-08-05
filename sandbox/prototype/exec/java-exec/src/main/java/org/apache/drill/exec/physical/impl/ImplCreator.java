@@ -45,9 +45,13 @@ import org.apache.drill.exec.record.RecordBatch;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
+/**
+ * Implementation of the physical operator visitor
+ */
 public class ImplCreator extends AbstractPhysicalVisitor<RecordBatch, FragmentContext, ExecutionSetupException>{
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ImplCreator.class);
 
+  // Element creators supported by this visitor
   private MockScanBatchCreator msc = new MockScanBatchCreator();
   private ScreenCreator sc = new ScreenCreator();
   private RandomReceiverCreator rrc = new RandomReceiverCreator();
