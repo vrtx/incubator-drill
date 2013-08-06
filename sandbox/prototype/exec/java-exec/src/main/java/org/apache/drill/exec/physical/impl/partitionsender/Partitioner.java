@@ -18,25 +18,26 @@
 
 package org.apache.drill.exec.physical.impl.hashsender;
 
-import java.util.List;
-
 import org.apache.drill.exec.compile.TemplateClassDefinition;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
+import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.record.TransferPair;
 
-public interface HashSender {
+import java.util.List;
+
+public interface Partitioner {
 
   public abstract void setup(FragmentContext context,
                              RecordBatch incoming,
-                             RecordBatch outgoing,
-                             List<TransferPair> transfers) throws SchemaChangeException;
+                             HashPartitionSender operator) throws SchemaChangeException;
 
-  public abstract int sendRecords(int recordCount,
-                                  int firstOutputIndex);
+  public abstract int processBatch(int recordCount,
+                                   int firstOutputIndex);
 
-  public static TemplateClassDefinition<HashSender> TEMPLATE_DEFINITION = new TemplateClassDefinition<HashSender>(
-      HashSender.class, "org.apache.drill.exec.physical.impl.HashSenderTemplate", HashSenderEvaluator.class, null);
+  public void partitionBatch(RecordBatch incoming, List<OutgoingRecordBatch> outgoing);
+  
+  public static TemplateClassDefinition<Partitioner> TEMPLATE_DEFINITION = new TemplateClassDefinition<Partitioner>(
+      Partitioner.class, "org.apache.drill.exec.physical.impl.PartitionerTemplate", PartitionerEvaluator.class, null);
 
 }

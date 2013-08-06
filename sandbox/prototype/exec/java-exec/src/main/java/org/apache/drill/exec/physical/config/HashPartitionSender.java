@@ -37,9 +37,12 @@ public class HashPartitionSender extends AbstractSender {
 
   private final List<DrillbitEndpoint> endpoints;
   private final LogicalExpression expr;
-  
+
   @JsonCreator
-  public HashPartitionSender(@JsonProperty("receiver-major-fragment") int oppositeMajorFragmentId, @JsonProperty("child") PhysicalOperator child, @JsonProperty("expr") LogicalExpression expr, @JsonProperty("destinations") List<DrillbitEndpoint> endpoints) {
+  public HashPartitionSender(@JsonProperty("receiver-major-fragment") int oppositeMajorFragmentId,
+                             @JsonProperty("child") PhysicalOperator child,
+                             @JsonProperty("expr") LogicalExpression expr,
+                             @JsonProperty("destinations") List<DrillbitEndpoint> endpoints) {
     super(oppositeMajorFragmentId, child);
     this.expr = expr;
     this.endpoints = endpoints;

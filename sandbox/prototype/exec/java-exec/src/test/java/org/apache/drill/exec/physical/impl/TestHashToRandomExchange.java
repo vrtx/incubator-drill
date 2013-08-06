@@ -52,8 +52,15 @@ public class TestHashToRandomExchange extends PopUnitTestBase {
               Charsets.UTF_8));
       int count = 0;
       for(QueryResultBatch b : results) {
-        System.out.println("Got result batch: " + b);
-        count += b.getHeader().getRowCount();
+        if (b.getHeader().getRowCount() == 0)
+          System.out.println(" -- Empty QueryResultBatch received from client.runQuery. -- ");
+        else {
+          System.out.println("Got result batch: ");
+          System.out.println("---------------------------------------");
+          System.out.println(b);
+          System.out.println("---------------------------------------");
+          count += b.getHeader().getRowCount();
+        }
       }
       assertEquals(100, count);
     }
