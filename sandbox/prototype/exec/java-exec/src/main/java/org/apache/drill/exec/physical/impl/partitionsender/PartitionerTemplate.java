@@ -16,7 +16,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package org.apache.drill.exec.physical.impl.hashsender;
+package org.apache.drill.exec.physical.impl.partitionsender;
 
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;

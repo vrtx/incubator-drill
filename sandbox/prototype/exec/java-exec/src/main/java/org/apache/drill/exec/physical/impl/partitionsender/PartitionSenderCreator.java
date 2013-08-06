@@ -16,7 +16,7 @@
  * limitations under the License.
  ******************************************************************************/
 
-package org.apache.drill.exec.physical.impl.hashsender;
+package org.apache.drill.exec.physical.impl.partitionsender;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.ErrorCollector;
