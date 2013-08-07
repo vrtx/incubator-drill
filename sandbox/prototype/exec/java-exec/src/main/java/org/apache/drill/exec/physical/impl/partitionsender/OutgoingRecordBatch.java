@@ -66,6 +66,7 @@ public class OutgoingRecordBatch implements RecordBatch {
   }
     
   public void flush() {
+    if (getRecordCount() == 0) logger.warn("Flushing an empty record batch");
     final ExecProtos.FragmentHandle handle = context.getHandle();
     FragmentWritableBatch writableBatch = new FragmentWritableBatch(isLast,
                                                                     handle.getQueryId(),
