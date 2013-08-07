@@ -24,6 +24,7 @@ import java.util.List;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.exec.expr.holders.ValueHolder;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.physical.impl.VectorHolder;
@@ -35,7 +36,7 @@ import org.apache.drill.exec.record.selection.SelectionVector4;
 import org.apache.drill.exec.rpc.BaseRpcOutcomeListener;
 import org.apache.drill.exec.rpc.RpcException;
 import org.apache.drill.exec.rpc.bit.BitTunnel;
-import org.apache.drill.exec.vector.ValueVector;
+import org.apache.drill.exec.vector.*;
 import org.apache.drill.exec.work.foreman.ErrorHelper;
 
 /**
@@ -56,6 +57,19 @@ public class OutgoingRecordBatch implements RecordBatch {
   private List<ValueVector> valueVectors;
   private VectorHolder vectorHolder;
   private int recordCount;
+  private int maxRecordCount;
+  
+  public void copyRecordFrom(RecordBatch source, int recNum, int numToCopy) {
+
+    // TODO:
+    Iterator<MaterializedField> field = outSchema.iterator();
+    
+    int i = 0;
+    while (field.hasNext() && i < valueVectors.size()) {
+      MaterializedField f = field.next();
+      ValueVector v = vectorHolder.getValueVector(i++, f.getValueClass());
+    }
+  }
 
   public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context){
     this.incoming = incoming;
@@ -79,6 +93,8 @@ public class OutgoingRecordBatch implements RecordBatch {
   }
 
   public void resetBatch() {
+    recordCount = 0;
+    maxRecordCount = incoming.getRecordCount();
     if (valueVectors != null) {
       for(ValueVector v : valueVectors){
         v.close();
@@ -90,7 +106,13 @@ public class OutgoingRecordBatch implements RecordBatch {
     SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(BatchSchema.SelectionVectorMode.NONE);
     for(ValueVector v : incoming){
       bldr.addField(v.getField());
+
+      // allocate a new value vector
+      ValueVector outgoingVector = TypeHelper.getNewVector(v.getField(), context.getAllocator());
+      getAllocator(outgoingVector, v).alloc(maxRecordCount);
+      valueVectors.add(outgoingVector);
     }
+    
     this.outSchema = bldr.build();
   }
 
@@ -163,6 +185,50 @@ public class OutgoingRecordBatch implements RecordBatch {
     return WritableBatch.get(this);
   }
 
+  private VectorAllocator getAllocator(ValueVector in, ValueVector outgoing){
+    if(outgoing instanceof FixedWidthVector){
+      return new FixedVectorAllocator((FixedWidthVector) outgoing);
+    }else if(outgoing instanceof VariableWidthVector && in instanceof VariableWidthVector){
+      return new VariableVectorAllocator( (VariableWidthVector) in, (VariableWidthVector) outgoing);
+    }else{
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  private class FixedVectorAllocator implements VectorAllocator{
+    FixedWidthVector out;
+
+    public FixedVectorAllocator(FixedWidthVector out) {
+      super();
+      this.out = out;
+    }
+
+    public void alloc(int recordCount){
+      out.allocateNew(recordCount);
+      out.getMutator().setValueCount(recordCount);
+    }
+  }
+
+  private class VariableVectorAllocator implements VectorAllocator{
+    VariableWidthVector in;
+    VariableWidthVector out;
+
+    public VariableVectorAllocator(VariableWidthVector in, VariableWidthVector out) {
+      super();
+      this.in = in;
+      this.out = out;
+    }
+
+    public void alloc(int recordCount){
+      out.allocateNew(in.getByteCapacity(), recordCount);
+      out.getMutator().setValueCount(recordCount);
+    }
+  }
+
+  public interface VectorAllocator{
+    public void alloc(int recordCount);
+  }  
+  
   private StatusHandler statusHandler = new StatusHandler();
   private class StatusHandler extends BaseRpcOutcomeListener<GeneralRPCProtos.Ack> {
     RpcException ex;
