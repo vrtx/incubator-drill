@@ -22,9 +22,9 @@ import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.record.RecordBatch;
 
-public interface PartitionerEvaluator {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionerEvaluator.class);
+import java.util.List;
 
-  public abstract void doSetup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing) throws SchemaChangeException;
-  public abstract void doEval(int inIndex, int outIndex);
+public interface PartitionerEvaluator {
+  public void doSetup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing) throws SchemaChangeException;
+  public void doEval(int inIndex, int outIndex);
 }

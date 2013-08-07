@@ -97,7 +97,6 @@ public class MockRecordReader implements RecordReader {
     for(ValueVector v : valueVectors){
       AllocationHelper.allocate(v, recordSetSize, 50);
       
-      logger.debug("MockRecordReader:  Generating random data for VV of type " + v.getClass().getName());
       ValueVector.Mutator m = v.getMutator();
       m.setValueCount(recordSetSize);
       m.generateTestData();

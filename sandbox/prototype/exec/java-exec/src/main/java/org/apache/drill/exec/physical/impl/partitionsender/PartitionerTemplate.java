@@ -20,78 +20,40 @@ package org.apache.drill.exec.physical.impl.partitionsender;
 
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.physical.config.HashPartitionSender;
-import org.apache.drill.exec.record.BatchSchema.SelectionVectorMode;
 import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.record.TransferPair;
-import org.apache.drill.exec.record.selection.SelectionVector2;
-import org.apache.drill.exec.record.selection.SelectionVector4;
-
-import com.google.common.collect.ImmutableList;
 
 import java.util.List;
 
 public abstract class PartitionerTemplate implements Partitioner {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionerTemplate.class);
 
-  private ImmutableList<TransferPair> transfers;
-  private SelectionVector2 vector2;
-  private SelectionVector4 vector4;
-  private SelectionVectorMode svMode;
-
+  private List<OutgoingRecordBatch> outgoing;
+  
   public PartitionerTemplate() throws SchemaChangeException {
-  }
-
-  @Override
-  public final int processBatch(final int recordCount, int firstOutputIndex) {
-    switch (svMode) {
-      case FOUR_BYTE:
-        throw new UnsupportedOperationException();
-      case TWO_BYTE:
-        final int count = recordCount*2;
-        for (int i = 0; i < count; i+=2, firstOutputIndex++) {
-          doEval(vector2.getIndex(i), firstOutputIndex);
-        }
-        return recordCount;
-      case NONE:
-        final int countN = recordCount;
-        for (int i = 0; i < countN; i++, firstOutputIndex++) {
-          doEval(i, firstOutputIndex);
-        }
-        return recordCount;
-      default:
-        throw new UnsupportedOperationException();
-    }
   }
 
   @Override
   public final void setup(FragmentContext context,
                           RecordBatch incoming,
-                          HashPartitionSender operator) throws SchemaChangeException {
-    this.svMode = incoming.getSchema().getSelectionVectorMode();
-    switch (svMode) {
-      case FOUR_BYTE:
-        this.vector4 = incoming.getSelectionVector4();
-        break;
-      case TWO_BYTE:
-        this.vector2 = incoming.getSelectionVector2();
-        break;
-    }
-    // 
-    setupEval(context, incoming, operator);
+                          List<OutgoingRecordBatch> outgoing) throws SchemaChangeException {
+    this.outgoing = outgoing;
+    doSetup(context, incoming, outgoing.get(0));  // TODO
   }
 
   @Override
-  public void partitionBatch(RecordBatch incoming, List<OutgoingRecordBatch> outgoing) {
-    // populate outgoing batches
+  public void partitionBatch(RecordBatch incoming) {
+    // TODO: populate outgoing batches
     //    - eval input record to determine outgoing batch
     //    - copy row into computed outgoing batch
     //    - if outgoing batch is full, send it
+                  //    final int countN = recordCount;
+                  //    for (int i = 0; i < countN; i++, firstOutputIndex++) {
+                  //      doEval(i, firstOutputIndex);
+                  //    }
+                  //    return recordCount;
   }
 
-  protected abstract void setupEval(FragmentContext context,
-                                    RecordBatch incoming,
-                                    HashPartitionSender operator) throws SchemaChangeException;
+  protected abstract void doSetup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing) throws SchemaChangeException;
   protected abstract void doEval(int inIndex, int outIndex);
 
 }

@@ -43,58 +43,72 @@ public class PartitionSenderCreator implements RootCreator<HashPartitionSender> 
   public RootExec getRoot(FragmentContext context,
                           HashPartitionSender config,
                           List<RecordBatch> children) throws ExecutionSetupException {
+
     assert children != null && children.size() == 1;
     return new PartitionSenderRootExec(context, children.iterator().next(), config);
+
   }
 
   private static class PartitionSenderRootExec implements RootExec {
+
     static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionSenderRootExec.class);
     private RecordBatch incoming;
     private HashPartitionSender operator;
     private List<OutgoingRecordBatch> outgoing;
     private Partitioner partitioner;
     private FragmentContext context;
-    private volatile boolean ok = true;
+    private boolean ok = true;
 
-    public PartitionSenderRootExec(FragmentContext context, RecordBatch incoming, HashPartitionSender operator) {
+    public PartitionSenderRootExec(FragmentContext context,
+                                   RecordBatch incoming,
+                                   HashPartitionSender operator) {
+
       this.incoming = incoming;
       this.operator = operator;
       this.context = context;
       this.outgoing = new ArrayList<>();
-      for (DrillbitEndpoint endpoint : operator.getDestinations()) {
-        outgoing.add(new OutgoingRecordBatch(operator, context.getCommunicator().getTunnel(endpoint), incoming, context));
+      for (DrillbitEndpoint endpoint : operator.getDestinations())
+        outgoing.add(new OutgoingRecordBatch(operator,
+                                             context.getCommunicator().getTunnel(endpoint),
+                                             incoming,
+                                             context));
+      try {
+        createPartitioner();
+      } catch (SchemaChangeException e) {
+        ok = false;
+        logger.error("Failure to create partitioning sender during query ", e);
+        context.fail(e);
       }
     }
 
     @Override
     public boolean next() {
+
       if (!ok) {
-        incoming.kill();
+        stop();
         return false;
       }
 
       RecordBatch.IterOutcome out = incoming.next();
-      logger.debug("Partitioner.next() sending status {}", out);
+      logger.debug("Partitioner.next(): got next record batch with status {}", out);
       switch(out){
         case STOP:
         case NONE:
-          if (partitioner == null)
-            return false;
-
           // populate outgoing batches
           if (incoming.getRecordCount() > 0)
-            partitioner.partitionBatch(incoming, outgoing);
+            partitioner.partitionBatch(incoming);
 
           // send all pending batches
-          flushOutgoingBatches(true);
+          flushOutgoingBatches(true, false);
           return false;
 
         case OK_NEW_SCHEMA:
           // send all existing batches
-          flushOutgoingBatches(false);
-          // update OutgoingRecordBatch's schema
+          flushOutgoingBatches(false, true);
+
+          // update OutgoingRecordBatch's schema and value vectors
           try {
-            createPartitioner();
+            partitioner.setup(context, incoming, outgoing);
           } catch (SchemaChangeException e) {
             incoming.kill();
             logger.error("Failure to create partitioning sender during query ", e);
@@ -102,7 +116,7 @@ public class PartitionSenderCreator implements RootCreator<HashPartitionSender> 
             return false;
           }
         case OK:
-          partitioner.partitionBatch(incoming, outgoing);
+          partitioner.partitionBatch(incoming);
           return true;
         case NOT_YET:
         default:
@@ -110,6 +124,11 @@ public class PartitionSenderCreator implements RootCreator<HashPartitionSender> 
       }
     }
 
+    public void stop() {
+      ok = false;
+      incoming.kill();
+    }
+    
     private void createPartitioner() throws SchemaChangeException {
       final LogicalExpression expr = operator.getExpr();
       final ErrorCollector collector = new ErrorCollectorImpl();
@@ -120,34 +139,28 @@ public class PartitionSenderCreator implements RootCreator<HashPartitionSender> 
         throw new SchemaChangeException(String.format("Failure while trying to materialize incoming schema.  Errors:\n %s.", collector.toErrorString()));
       }
 
-      // generate code to copy vectors, similar to svremover's RemovingRecordBatch.generateCopies()
-
       try {
         // compile and setup generated code
         partitioner = context.getImplementationClass(cg);
-        partitioner.setup(context, incoming, operator);
       } catch (ClassTransformationException | IOException e) {
         throw new SchemaChangeException("Failure while attempting to load generated class", e);
       }
     }
 
     /**
-     * Flush each outgoing record batch, and reset the state of each batch (e.g. due to schema change).  Note that
-     * the schema is updated based on incoming when called.
-     * @param isLastBatch
+     * Flush each outgoing record batch, and optionally reset the state of each outgoing record
+     * batch (on schema change).  Note that the schema is updated based on incoming at the time
+     * this function is invoked.
+     *
+     * @param isLastBatch    true if this is the last incoming batch
+     * @param schemaChanged  true if the schema has changed
      */
-    public void flushOutgoingBatches(boolean isLastBatch) {
+    public void flushOutgoingBatches(boolean isLastBatch, boolean schemaChanged) {
       for (OutgoingRecordBatch batch : outgoing) {
-        if (isLastBatch)
-          batch.setIsLast();
+        if (isLastBatch) batch.setIsLast();
         batch.flush();
-        batch.resetBatch();
+        if (schemaChanged) batch.resetBatch();
       }
-    }
-
-    @Override
-    public void stop() {
-      ok = false;
     }
   }
 }

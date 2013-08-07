@@ -30,14 +30,13 @@ public interface Partitioner {
 
   public abstract void setup(FragmentContext context,
                              RecordBatch incoming,
-                             HashPartitionSender operator) throws SchemaChangeException;
+                             List<OutgoingRecordBatch> outgoing) throws SchemaChangeException;
 
-  public abstract int processBatch(int recordCount,
-                                   int firstOutputIndex);
-
-  public void partitionBatch(RecordBatch incoming, List<OutgoingRecordBatch> outgoing);
+  public abstract void partitionBatch(RecordBatch incoming);
   
-  public static TemplateClassDefinition<Partitioner> TEMPLATE_DEFINITION = new TemplateClassDefinition<Partitioner>(
-      Partitioner.class, "org.apache.drill.exec.physical.impl.PartitionerTemplate", PartitionerEvaluator.class, null);
-
+  public static TemplateClassDefinition<Partitioner> TEMPLATE_DEFINITION =
+      new TemplateClassDefinition<>(Partitioner.class,
+                                    "org.apache.drill.exec.physical.impl.partitionsender.PartitionerTemplate",
+                                    PartitionerEvaluator.class,
+                                    null);
 }

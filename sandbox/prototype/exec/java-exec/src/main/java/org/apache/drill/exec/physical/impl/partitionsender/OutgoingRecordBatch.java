@@ -38,7 +38,11 @@ import org.apache.drill.exec.rpc.bit.BitTunnel;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.work.foreman.ErrorHelper;
 
-
+/**
+ * OutgoingRecordBatch is a holder of value vectors which are to be sent to another host.  Thus,
+ * next() will never be called on this object.  When a record batch is ready to send (e.g. nearing size
+ * limit or schema change), call flush() to send the batch.
+ */
 public class OutgoingRecordBatch implements RecordBatch {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OutgoingRecordBatch.class);
 
@@ -69,8 +73,24 @@ public class OutgoingRecordBatch implements RecordBatch {
                                                                     handle.getMinorFragmentId(),
                                                                     operator.getOppositeMajorFragmentId(),
                                                                     0,
-                                                                    incoming.getWritableBatch());
+                                                                    getWritableBatch());
     tunnel.sendRecordBatch(statusHandler, context, writableBatch);
+  }
+
+  public void resetBatch() {
+    if (valueVectors != null) {
+      for(ValueVector v : valueVectors){
+        v.close();
+      }
+    }
+    this.valueVectors = Lists.newArrayList();
+    this.vectorHolder = new VectorHolder(valueVectors);
+
+    SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(BatchSchema.SelectionVectorMode.NONE);
+    for(ValueVector v : incoming){
+      bldr.addField(v.getField());
+    }
+    this.outSchema = bldr.build();
   }
 
   public void setIsLast() {
@@ -140,22 +160,6 @@ public class OutgoingRecordBatch implements RecordBatch {
   @Override
   public WritableBatch getWritableBatch() {
     return WritableBatch.get(this);
-  }
-
-  public void resetBatch() {
-    if (valueVectors != null) {
-      for(ValueVector v : valueVectors){
-        v.close();
-      }
-    }
-    this.valueVectors = Lists.newArrayList();
-    this.vectorHolder = new VectorHolder(valueVectors);
-
-    SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(BatchSchema.SelectionVectorMode.NONE);
-    for(ValueVector v : incoming){
-      bldr.addField(v.getField());
-    }
-    this.outSchema = bldr.build();
   }
 
   private StatusHandler statusHandler = new StatusHandler();
