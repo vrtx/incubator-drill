@@ -20,8 +20,10 @@ package org.apache.drill.exec.physical.config;
 import java.util.List;
 
 import org.apache.drill.common.expression.LogicalExpression;
+import org.apache.drill.common.logical.data.NamedExpression;
 import org.apache.drill.exec.physical.base.AbstractSender;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
+import org.apache.drill.exec.physical.base.PhysicalVisitor;
 import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -35,9 +37,12 @@ public class HashPartitionSender extends AbstractSender {
 
   private final List<DrillbitEndpoint> endpoints;
   private final LogicalExpression expr;
-  
+
   @JsonCreator
-  public HashPartitionSender(@JsonProperty("receiver-major-fragment") int oppositeMajorFragmentId, @JsonProperty("child") PhysicalOperator child, @JsonProperty("expr") LogicalExpression expr, @JsonProperty("destinations") List<DrillbitEndpoint> endpoints) {
+  public HashPartitionSender(@JsonProperty("receiver-major-fragment") int oppositeMajorFragmentId,
+                             @JsonProperty("child") PhysicalOperator child,
+                             @JsonProperty("expr") LogicalExpression expr,
+                             @JsonProperty("destinations") List<DrillbitEndpoint> endpoints) {
     super(oppositeMajorFragmentId, child);
     this.expr = expr;
     this.endpoints = endpoints;
@@ -53,6 +58,14 @@ public class HashPartitionSender extends AbstractSender {
     return new HashPartitionSender(oppositeMajorFragmentId, child, expr, endpoints);
   }
 
+  public LogicalExpression getExpr() {
+    return expr;
+  }
+  
+  @Override
+  public <T, X, E extends Throwable> T accept(PhysicalVisitor<T, X, E> physicalVisitor, X value) throws E {
+    return physicalVisitor.visitHashPartitionSender(this, value);
+  }
   
 
 }
