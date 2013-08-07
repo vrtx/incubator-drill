@@ -24,10 +24,8 @@ import java.util.List;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.expression.SchemaPath;
-import org.apache.drill.exec.expr.holders.ValueHolder;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
-import org.apache.drill.exec.physical.impl.VectorHolder;
 import org.apache.drill.exec.proto.ExecProtos;
 import org.apache.drill.exec.proto.GeneralRPCProtos;
 import org.apache.drill.exec.record.*;
@@ -55,7 +53,7 @@ public class OutgoingRecordBatch implements RecordBatch {
   private final FragmentContext context;
   private BatchSchema outSchema;
   private List<ValueVector> valueVectors;
-  private VectorHolder vectorHolder;
+  private VectorContainer vectorContainer;
   private int recordCount;
   private int maxRecordCount;
   
@@ -67,7 +65,7 @@ public class OutgoingRecordBatch implements RecordBatch {
     int i = 0;
     while (field.hasNext() && i < valueVectors.size()) {
       MaterializedField f = field.next();
-      ValueVector v = vectorHolder.getValueVector(i++, f.getValueClass());
+      VectorWrapper v = vectorContainer.getVectorAccessor(i++, f.getValueClass());
     }
   }
 
@@ -100,20 +98,20 @@ public class OutgoingRecordBatch implements RecordBatch {
         v.close();
       }
     }
-    this.valueVectors = Lists.newArrayList();
-    this.vectorHolder = new VectorHolder(valueVectors);
+    valueVectors = Lists.newArrayList();
+    vectorContainer = new VectorContainer();
 
     SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(BatchSchema.SelectionVectorMode.NONE);
-    for(ValueVector v : incoming){
+    for(VectorWrapper v : incoming){
+      vectorContainer.add(v.getValueVector());
       bldr.addField(v.getField());
 
       // allocate a new value vector
       ValueVector outgoingVector = TypeHelper.getNewVector(v.getField(), context.getAllocator());
-      getAllocator(outgoingVector, v).alloc(maxRecordCount);
+      getAllocator(outgoingVector, v.getValueVector()).alloc(maxRecordCount);
       valueVectors.add(outgoingVector);
     }
-    
-    this.outSchema = bldr.build();
+    outSchema = bldr.build();
   }
 
   public void setIsLast() {
@@ -132,11 +130,6 @@ public class OutgoingRecordBatch implements RecordBatch {
   public IterOutcome next() {
     assert false;
     return IterOutcome.STOP;
-  }
-
-  @Override
-  public Iterator<ValueVector> iterator() {
-    return valueVectors.iterator();
   }
 
   @Override
@@ -172,12 +165,17 @@ public class OutgoingRecordBatch implements RecordBatch {
 
   @Override
   public TypedFieldId getValueVectorId(SchemaPath path) {
-    return vectorHolder.getValueVector(path);
+    return vectorContainer.getValueVector(path);
   }
 
   @Override
-  public <T extends ValueVector> T getValueVectorById(int fieldId, Class<?> clazz) {
-    return vectorHolder.getValueVector(fieldId, clazz);
+  public VectorWrapper<?> getValueAccessorById(int fieldId, Class<?> clazz) {
+    return vectorContainer.getVectorAccessor(fieldId, clazz);
+  }
+
+  @Override
+  public Iterator<VectorWrapper<?>> iterator() {
+    return vectorContainer.iterator();
   }
 
   @Override
