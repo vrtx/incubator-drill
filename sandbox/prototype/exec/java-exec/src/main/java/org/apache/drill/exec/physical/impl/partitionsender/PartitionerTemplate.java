@@ -18,7 +18,11 @@
 
 package org.apache.drill.exec.physical.impl.partitionsender;
 
+import org.apache.drill.common.expression.*;
 import org.apache.drill.exec.exception.SchemaChangeException;
+import org.apache.drill.exec.expr.CodeGenerator;
+import org.apache.drill.exec.expr.ExpressionTreeMaterializer;
+import org.apache.drill.exec.expr.fn.impl.Hash;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.record.RecordBatch;
 
@@ -28,6 +32,8 @@ public abstract class PartitionerTemplate implements Partitioner {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionerTemplate.class);
 
   private List<OutgoingRecordBatch> outgoing;
+  private FragmentContext context;
+  private OutgoingRecordBatch current; 
   
   public PartitionerTemplate() throws SchemaChangeException {
   }
@@ -36,21 +42,24 @@ public abstract class PartitionerTemplate implements Partitioner {
   public final void setup(FragmentContext context,
                           RecordBatch incoming,
                           List<OutgoingRecordBatch> outgoing) throws SchemaChangeException {
+    System.out.println("PartitionerTemplate.setup() template invoked");
     this.outgoing = outgoing;
-    doSetup(context, incoming, outgoing.get(0));  // TODO
+    this.context = context;
+    doSetup(context, incoming, outgoing.get(0));
+
   }
 
   @Override
   public void partitionBatch(RecordBatch incoming) {
-    // TODO: populate outgoing batches
-    //    - eval input record to determine outgoing batch
-    //    - copy row into computed outgoing batch
-    //    - if outgoing batch is full, send it
-                  //    final int countN = recordCount;
-                  //    for (int i = 0; i < countN; i++, firstOutputIndex++) {
-                  //      doEval(i, firstOutputIndex);
-                  //    }
-                  //    return recordCount;
+    System.out.println("PartitionTemplate.partitionBatch() template invoked");
+
+    for (int recordId = 0; recordId < incoming.getRecordCount(); ++recordId) {
+      // TODO: if attempting to insert too large of a value, send the batch, re-createPartitioner() and try again
+      // TODO: evalHash() to determine second arg
+      doEval(recordId, 0);
+      // TODO: if outgoing batch is full, send it
+
+    }
   }
 
   protected abstract void doSetup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing) throws SchemaChangeException;

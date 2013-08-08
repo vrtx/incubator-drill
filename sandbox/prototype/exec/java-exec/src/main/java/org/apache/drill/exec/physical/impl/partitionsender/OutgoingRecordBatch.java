@@ -56,18 +56,6 @@ public class OutgoingRecordBatch implements RecordBatch {
   private VectorContainer vectorContainer;
   private int recordCount;
   private int maxRecordCount;
-  
-  public void copyRecordFrom(RecordBatch source, int recNum, int numToCopy) {
-
-    // TODO:
-    Iterator<MaterializedField> field = outSchema.iterator();
-    
-    int i = 0;
-    while (field.hasNext() && i < valueVectors.size()) {
-      MaterializedField f = field.next();
-      VectorWrapper v = vectorContainer.getVectorAccessor(i++, f.getValueClass());
-    }
-  }
 
   public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context){
     this.incoming = incoming;

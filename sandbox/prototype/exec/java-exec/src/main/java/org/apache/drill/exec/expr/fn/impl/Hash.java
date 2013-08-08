@@ -41,6 +41,7 @@ public class Hash implements DrillFunc {
   }
 
   public void eval() {
+    System.out.println("[GENERATED: HASH]: hash() eval called.");
     // TODO: implement actual hash function (e.g. murmur3), on multiple input types.
     out.value = (int)in.value;
   }
