@@ -19,22 +19,15 @@
 package org.apache.drill.exec.physical.impl.partitionsender;
 
 import com.beust.jcommander.internal.Lists;
-import com.google.common.collect.ImmutableList;
-import com.google.common.hash.HashFunction;
-import com.sun.codemodel.JExpr;
-import com.sun.codemodel.JExpression;
-import com.sun.codemodel.JVar;
+import com.sun.codemodel.*;
 import org.apache.drill.common.expression.*;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.CodeGenerator;
 import org.apache.drill.exec.expr.ExpressionTreeMaterializer;
-import org.apache.drill.exec.expr.fn.impl.ComparatorFunctions;
-import org.apache.drill.exec.expr.fn.impl.Hash;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.physical.impl.RootExec;
-import org.apache.drill.exec.physical.impl.filter.ReturnValueExpression;
 import org.apache.drill.exec.proto.CoordinationProtos;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.TypedFieldId;
@@ -71,7 +64,7 @@ class PartitionSenderRootExec implements RootExec {
       createPartitioner();
     } catch (SchemaChangeException e) {
       ok = false;
-      logger.error("Failure to create partitioning sender during query ", e);
+      logger.error("Failed to create partitioning sender during query ", e);
       context.fail(e);
     }
   }
@@ -137,7 +130,6 @@ class PartitionSenderRootExec implements RootExec {
 
     // set up partitioning function
     final LogicalExpression expr = operator.getExpr();
-    System.out.println("Creating Partitioner w/ expression: " + expr);
     final ErrorCollector collector = new ErrorCollectorImpl();
     final CodeGenerator<Partitioner> cg = new CodeGenerator<Partitioner>(Partitioner.TEMPLATE_DEFINITION, context.getFunctionRegistry());
 
@@ -152,18 +144,31 @@ class PartitionSenderRootExec implements RootExec {
     JExpression outIndex = JExpr.direct("outIndex");
     cg.rotateBlock();
 
-    List<JVar> outVVs = Lists.newArrayList();
-    for (OutgoingRecordBatch batch : outgoing) {
-      for (VectorWrapper<?> vv : batch) {
-        outVVs.add(cg.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(vv.getField().getType(), fieldId, false)));
-        fieldId++;
-      }
-    }
+    // declare incoming value vectors
+    List<JVar> incomingVVs = Lists.newArrayList();
+    List<JVar> RecordCounters = Lists.newArrayList();
     for (VectorWrapper<?> vvIn : incoming) {
-      JVar inVV = cg.declareVectorValueSetupAndMember("incoming", new TypedFieldId(vvIn.getField().getType(), fieldId, vvIn.isHyper()));
-      cg.getBlock().add(outVVs.get(0).invoke("copyFrom").arg(inIndex).arg(outIndex).arg(inVV));
+      incomingVVs.add(cg.declareVectorValueSetupAndMember("incoming", new TypedFieldId(vvIn.getField().getType(), fieldId++, vvIn.isHyper())));
     }
 
+    int batchId = 0;
+    fieldId = 0;
+    // generate switch statement for each destination batch
+    JSwitch switchStatement = cg.getBlock()._switch(outIndex);
+    for (OutgoingRecordBatch batch : outgoing) {
+      // generate case statement for this batch
+      JBlock caseBlock = switchStatement._case(JExpr.lit(batchId)).body();
+      for (VectorWrapper<?> vv : batch) {
+        // declare outgoing value vector and a corresponding counter
+        JVar outVV = cg.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(vv.getField().getType(), fieldId, false));
+        JVar outVVCounter = cg.declareClassField("recordCount", cg.getModel().ref(Integer.class));
+        caseBlock.add(outVV.invoke("copyFrom").arg(inIndex).arg(outVVCounter.incr()).arg(incomingVVs.get(fieldId)));
+        ++fieldId;
+      }
+      caseBlock._break();
+      ++batchId;
+    }
+    
     try {
       // compile and setup generated code
       partitioner = context.getImplementationClass(cg);
