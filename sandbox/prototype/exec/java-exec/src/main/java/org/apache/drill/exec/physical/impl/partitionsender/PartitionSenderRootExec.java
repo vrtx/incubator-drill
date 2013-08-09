@@ -32,10 +32,8 @@ import org.apache.drill.exec.proto.CoordinationProtos;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.TypedFieldId;
 import org.apache.drill.exec.record.VectorWrapper;
-import org.apache.drill.exec.vector.TypeHelper;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 class PartitionSenderRootExec implements RootExec {
@@ -84,37 +82,28 @@ class PartitionSenderRootExec implements RootExec {
     switch(out){
       case STOP:
       case NONE:
-        System.out.println("\n[STOP | NONE]");
-        System.out.println("(STOP | NONE) sending batch with incoming record count: " + incoming.getRecordCount());
         // populate outgoing batches
         if (incoming.getRecordCount() > 0)
           partitioner.partitionBatch(incoming);
 
         // send all pending batches
-        System.out.println("(STOP | NONE) flushing LAST batch; schema change = false.  outgoing vectors: " + outgoing.length);
-//        flushOutgoingBatches(true, false);
+        flushOutgoingBatches(true, false);
         return false;
 
       case OK_NEW_SCHEMA:
         // send all existing batches
-        System.out.println("\n[OK_NEW_SCHEMA]");
-//        System.out.println("(OK_NEW_SCHEMA) flushing all record batches.  outgoing vectors: " +outgoing.length);
-//        flushOutgoingBatches(false, true);
-
+        flushOutgoingBatches(false, true);
         // update OutgoingRecordBatch's schema and value vectors
         try {
+          createPartitioner();
           partitioner.setup(context, incoming, outgoing);
-          System.out.println("(OK_NEW_SCHEMA) done setting up partitioner.  outgoing vectors: " + outgoing.length);
         } catch (SchemaChangeException e) {
-          System.out.println("(OK_NEW_SCHEMA) EXCEPTION: " + e);
           incoming.kill();
-          logger.error("Failure to create partitioning sender during query ", e);
+          logger.error("Failed to create partitioning sender during query ", e);
           context.fail(e);
           return false;
         }
       case OK:
-        System.out.println("\n[OK]");
-        System.out.println("(OK) partitioning incoming record batch among " + outgoing.length + " outgoing batches");
         partitioner.partitionBatch(incoming);
         return true;
       case NOT_YET:
@@ -146,29 +135,44 @@ class PartitionSenderRootExec implements RootExec {
     JExpression outIndex = JExpr.direct("outIndex");
     cg.rotateBlock();
 
+    // declare array of record batches for each partition
+    JVar outgoingBatches = cg.clazz.field(JMod.NONE,
+                                          cg.getModel().ref(OutgoingRecordBatch.class).array(),
+                                          "outgoingBatches");
+
+    cg.getSetupBlock().assign(outgoingBatches, JExpr.direct("outgoing"));
+
     // declare incoming value vectors
     List<JVar> incomingVVs = Lists.newArrayList();
-    List<JVar> RecordCounters = Lists.newArrayList();
-    for (VectorWrapper<?> vvIn : incoming) {
-      incomingVVs.add(cg.declareVectorValueSetupAndMember("incoming", new TypedFieldId(vvIn.getField().getType(), fieldId++, vvIn.isHyper())));
-      System.out.println("Incoming VV " + (fieldId-1) + ":  " + vvIn);
-    }
+    for (VectorWrapper<?> vvIn : incoming)
+      incomingVVs.add(cg.declareVectorValueSetupAndMember("incoming", new TypedFieldId(vvIn.getField().getType(),
+                                                                                       fieldId++,
+                                                                                       vvIn.isHyper())));
 
     int batchId = 0;
     fieldId = 0;
     // generate switch statement for each destination batch
     JSwitch switchStatement = cg.getBlock()._switch(outIndex);
     for (OutgoingRecordBatch batch : outgoing) {
+
       // generate case statement for this batch
       JBlock caseBlock = switchStatement._case(JExpr.lit(batchId)).body();
+
       for (VectorWrapper<?> vv : batch) {
         // declare outgoing value vector and a corresponding counter
-        System.out.println("Batch VV " + batchId + ":  " + vv);
-        JVar outVV = cg.declareVectorValueSetupAndMember("outgoing[" + batchId + "]", new TypedFieldId(vv.getField().getType(), fieldId, false));
-        JVar outVVCounter = cg.declareClassField("recordCount", cg.getModel().ref(Integer.class));
-        caseBlock.add(outVV.invoke("copyFrom").arg(inIndex).arg(outVVCounter.incr()).arg(incomingVVs.get(fieldId)));
+        JVar outVV = cg.declareVectorValueSetupAndMember("outgoing[" + batchId + "]",
+                                                         new TypedFieldId(vv.getField().getType(),
+                                                                          fieldId,
+                                                                          false));
+
+        caseBlock.add(outVV.invoke("copyFrom")
+                              .arg(inIndex)
+                              .arg(JExpr.direct("outgoingBatches[" + batchId + "]").invoke("getRecordCount"))
+                              .arg(incomingVVs.get(fieldId)));
         ++fieldId;
       }
+      caseBlock.add(JExpr.direct("outgoingBatches[" + batchId + "]").invoke("incRecordCount"));
+      caseBlock.add(JExpr.direct("outgoingBatches[" + batchId + "]").invoke("flushIfNecessary"));
       fieldId = 0;
       caseBlock._break();
       ++batchId;
@@ -194,12 +198,12 @@ class PartitionSenderRootExec implements RootExec {
    */
   public void flushOutgoingBatches(boolean isLastBatch, boolean schemaChanged) {
     for (OutgoingRecordBatch batch : outgoing) {
-      System.out.println("flushOutgoingBatches: flushing batch: " + (isLastBatch ? "LastBatch " : "")
-                                                                  + (schemaChanged ? "schemaChanged " : "")
-                                                                  + batch);
-      if (isLastBatch) batch.setIsLast();
+      logger.debug("Attempting to flush all outgoing batches");
+      if (isLastBatch)
+        batch.setIsLast();
       batch.flush();
-      if (schemaChanged) batch.resetBatch();
+      if (schemaChanged)
+        batch.resetBatch();
     }
   }
 }

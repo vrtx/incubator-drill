@@ -55,14 +55,14 @@ public class OutgoingRecordBatch implements RecordBatch {
   private List<ValueVector> valueVectors;
   private VectorContainer vectorContainer;
   private int recordCount;
-  private int maxRecordCount;
+  private int recordCapacity;
 
   public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context) {
     this.incoming = incoming;
     this.context = context;
     this.operator = operator;
     this.tunnel = tunnel;
-    resetBatch();
+    initializeBatch();
   }
 
   public OutgoingRecordBatch() {  }
@@ -75,8 +75,19 @@ public class OutgoingRecordBatch implements RecordBatch {
     resetBatch();
   }
 
+  public void flushIfNecessary() {
+    if (recordCount == recordCapacity - 1) flush();
+  }
+
+  public void incRecordCount() {
+    ++recordCount;
+  }
+  
   public void flush() {
-    if (getRecordCount() == 0) logger.warn("Flushing an empty record batch");
+    if (recordCount == 0) {
+      logger.warn("Attempted to flush an empty record batch");
+      return;
+    }
     final ExecProtos.FragmentHandle handle = context.getHandle();
     FragmentWritableBatch writableBatch = new FragmentWritableBatch(isLast,
                                                                     handle.getQueryId(),
@@ -86,42 +97,56 @@ public class OutgoingRecordBatch implements RecordBatch {
                                                                     0,
                                                                     getWritableBatch());
     tunnel.sendRecordBatch(statusHandler, context, writableBatch);
+
+    // reset values and reallocate the buffer for each value vector.  NOTE: the value vector is directly
+    // referenced by generated code and must not be replaced.
+    recordCount = 0;
+    for (VectorWrapper v : vectorContainer) {
+      getAllocator(TypeHelper.getNewVector(v.getField(), context.getAllocator()),
+                   v.getValueVector()).alloc(recordCapacity);
+    }
   }
 
-  public void resetBatch() {
-    recordCount = 0;
-    maxRecordCount = incoming.getRecordCount();
-    if (valueVectors != null) {
-      for(ValueVector v : valueVectors){
-        v.close();
-      }
-    }
+  /**
+   * Create a new output schema and allocate space for value vectors based on the incoming record batch.
+   */
+  public void initializeBatch() {
+    recordCapacity = incoming.getRecordCount();
     valueVectors = Lists.newArrayList();
     vectorContainer = new VectorContainer();
 
     SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(BatchSchema.SelectionVectorMode.NONE);
-    for(VectorWrapper v : incoming){
-      vectorContainer.add(v.getValueVector());
+    for (VectorWrapper v : incoming) {
+
+      // add field to the output schema
       bldr.addField(v.getField());
 
       // allocate a new value vector
+      vectorContainer.add(v.getValueVector());
       ValueVector outgoingVector = TypeHelper.getNewVector(v.getField(), context.getAllocator());
-      getAllocator(outgoingVector, v.getValueVector()).alloc(maxRecordCount);
+      getAllocator(outgoingVector, v.getValueVector()).alloc(recordCapacity);
       valueVectors.add(outgoingVector);
     }
     outSchema = bldr.build();
   }
 
+  /**
+   * Free any existing value vectors, create new output schema, and allocate value vectors based
+   * on the incoming record batch.
+   */
+  public void resetBatch() {
+    recordCount = 0;
+    recordCapacity = 0;
+    if (valueVectors != null) {
+      for(ValueVector v : valueVectors){
+        v.close();
+      }
+    }
+    initializeBatch();
+  }
+
   public void setIsLast() {
     isLast = true;
-  }
-
-  public BitTunnel getTunnel() {
-    return tunnel;
-  }
-
-  RecordBatch getIncoming() {
-    return incoming;
   }
 
   @Override

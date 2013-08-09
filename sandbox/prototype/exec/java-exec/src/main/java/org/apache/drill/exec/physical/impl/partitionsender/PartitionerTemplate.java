@@ -22,13 +22,9 @@ import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.record.RecordBatch;
 
-import java.util.List;
-
 public abstract class PartitionerTemplate implements Partitioner {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionerTemplate.class);
 
-  private OutgoingRecordBatch[] outgoing;
-  
   public PartitionerTemplate() throws SchemaChangeException {
   }
 
@@ -37,8 +33,6 @@ public abstract class PartitionerTemplate implements Partitioner {
                           RecordBatch incoming,
                           OutgoingRecordBatch[] outgoing) throws SchemaChangeException {
 
-    this.outgoing = outgoing;
-    // TODO: generate reference to List<outgoing> instead of single function param
     doSetup(context, incoming, outgoing);
 
   }
@@ -49,11 +43,12 @@ public abstract class PartitionerTemplate implements Partitioner {
     for (int recordId = 0; recordId < incoming.getRecordCount(); ++recordId) {
       // for each record
 
-      // TODO: inject partitioning expression
-      int hash = 0;
-      // TODO: if attempting to insert too large of a value, send the batch, re-createPartitioner() and try again
-      doEval(recordId, hash % outgoing.length);
-      // TODO: if outgoing batch is full, send it
+      // TODO: evaluate partitioning expression
+      int partition = 0;
+      // TODO: if attempting to insert too large of a value into a vector:
+      //         - send the batch
+      //         - reallocate (at least the size of the current value) and try again
+      doEval(recordId, partition);
     }
 
   }

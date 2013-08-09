@@ -19,8 +19,6 @@
 package org.apache.drill.exec.expr.fn.impl;
 
 import org.apache.drill.common.expression.*;
-import org.apache.drill.common.types.TypeProtos;
-import org.apache.drill.common.types.Types;
 import org.apache.drill.exec.expr.DrillFunc;
 import org.apache.drill.exec.expr.annotations.FunctionTemplate;
 import org.apache.drill.exec.expr.annotations.FunctionTemplate.FunctionScope;
@@ -29,7 +27,6 @@ import org.apache.drill.exec.expr.annotations.Param;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.vector.BigIntHolder;
 import org.apache.drill.exec.vector.IntHolder;
-import org.apache.drill.exec.vector.VarCharHolder;
 
 @FunctionTemplate(name = "hash", scope = FunctionScope.SIMPLE, nulls = FunctionTemplate.NullHandling.NULL_IF_NULL)
 public class Hash implements DrillFunc {
@@ -41,8 +38,7 @@ public class Hash implements DrillFunc {
   }
 
   public void eval() {
-    System.out.println("[GENERATED: HASH]: hash() eval called.");
-    // TODO: implement actual hash function (e.g. murmur3), on multiple input types.
+    // TODO: implement hash function for various types
     out.value = (int)in.value;
   }
 

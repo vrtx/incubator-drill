@@ -23,8 +23,6 @@ import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.record.RecordBatch;
 
-import java.util.List;
-
 public interface Partitioner {
 
   public abstract void setup(FragmentContext context,
