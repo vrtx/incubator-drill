@@ -45,26 +45,36 @@ import org.apache.drill.exec.work.foreman.ErrorHelper;
 public class OutgoingRecordBatch implements RecordBatch {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OutgoingRecordBatch.class);
 
-  private final BitTunnel tunnel;
-  private final HashPartitionSender operator;
+  private BitTunnel tunnel;
+  private HashPartitionSender operator;
   private volatile boolean ok = true;
   private boolean isLast = false;
-  private final RecordBatch incoming;
-  private final FragmentContext context;
+  private RecordBatch incoming;
+  private FragmentContext context;
   private BatchSchema outSchema;
   private List<ValueVector> valueVectors;
   private VectorContainer vectorContainer;
   private int recordCount;
   private int maxRecordCount;
 
-  public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context){
+  public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context) {
     this.incoming = incoming;
     this.context = context;
     this.operator = operator;
     this.tunnel = tunnel;
     resetBatch();
   }
-    
+
+  public OutgoingRecordBatch() {  }
+
+  public void init(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context) {
+    this.incoming = incoming;
+    this.context = context;
+    this.operator = operator;
+    this.tunnel = tunnel;
+    resetBatch();
+  }
+
   public void flush() {
     if (getRecordCount() == 0) logger.warn("Flushing an empty record batch");
     final ExecProtos.FragmentHandle handle = context.getHandle();

@@ -25,6 +25,6 @@ import org.apache.drill.exec.record.RecordBatch;
 import java.util.List;
 
 public interface PartitionerEvaluator {
-  public void doSetup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing) throws SchemaChangeException;
+  public void doSetup(FragmentContext context, RecordBatch incoming, OutgoingRecordBatch[] outgoing) throws SchemaChangeException;
   public void doEval(int inIndex, int outIndex);
 }

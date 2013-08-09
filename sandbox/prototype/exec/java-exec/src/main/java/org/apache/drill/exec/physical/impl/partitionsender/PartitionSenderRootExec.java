@@ -32,6 +32,7 @@ import org.apache.drill.exec.proto.CoordinationProtos;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.TypedFieldId;
 import org.apache.drill.exec.record.VectorWrapper;
+import org.apache.drill.exec.vector.TypeHelper;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,7 +43,7 @@ class PartitionSenderRootExec implements RootExec {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionSenderRootExec.class);
   private RecordBatch incoming;
   private HashPartitionSender operator;
-  private List<OutgoingRecordBatch> outgoing;
+  private OutgoingRecordBatch[] outgoing;
   private Partitioner partitioner;
   private FragmentContext context;
   private boolean ok = true;
@@ -54,12 +55,13 @@ class PartitionSenderRootExec implements RootExec {
     this.incoming = incoming;
     this.operator = operator;
     this.context = context;
-    this.outgoing = new ArrayList<>();
+    this.outgoing = new OutgoingRecordBatch[operator.getDestinations().size()];
+    int fieldId = 0;
     for (CoordinationProtos.DrillbitEndpoint endpoint : operator.getDestinations())
-      outgoing.add(new OutgoingRecordBatch(operator,
-        context.getCommunicator().getTunnel(endpoint),
-        incoming,
-        context));
+      outgoing[fieldId] = new OutgoingRecordBatch(operator,
+                             context.getCommunicator().getTunnel(endpoint),
+                             incoming,
+                             context);
     try {
       createPartitioner();
     } catch (SchemaChangeException e) {
@@ -89,20 +91,20 @@ class PartitionSenderRootExec implements RootExec {
           partitioner.partitionBatch(incoming);
 
         // send all pending batches
-        System.out.println("(STOP | NONE) flushing LAST batch; schema change = false.  outgoing vectors: " + outgoing.size());
-        flushOutgoingBatches(true, false);
+        System.out.println("(STOP | NONE) flushing LAST batch; schema change = false.  outgoing vectors: " + outgoing.length);
+//        flushOutgoingBatches(true, false);
         return false;
 
       case OK_NEW_SCHEMA:
         // send all existing batches
         System.out.println("\n[OK_NEW_SCHEMA]");
-        System.out.println("(OK_NEW_SCHEMA) flushing all record batches.  outgoing vectors: " + outgoing.size());
-        flushOutgoingBatches(false, true);
+//        System.out.println("(OK_NEW_SCHEMA) flushing all record batches.  outgoing vectors: " +outgoing.length);
+//        flushOutgoingBatches(false, true);
 
         // update OutgoingRecordBatch's schema and value vectors
         try {
           partitioner.setup(context, incoming, outgoing);
-          System.out.println("(OK_NEW_SCHEMA) done setting up partitioner.  outgoing vectors: " + outgoing.size());
+          System.out.println("(OK_NEW_SCHEMA) done setting up partitioner.  outgoing vectors: " + outgoing.length);
         } catch (SchemaChangeException e) {
           System.out.println("(OK_NEW_SCHEMA) EXCEPTION: " + e);
           incoming.kill();
@@ -112,7 +114,7 @@ class PartitionSenderRootExec implements RootExec {
         }
       case OK:
         System.out.println("\n[OK]");
-        System.out.println("(OK) partitioning incoming record batch among " + outgoing.size() + " outgoing batches");
+        System.out.println("(OK) partitioning incoming record batch among " + outgoing.length + " outgoing batches");
         partitioner.partitionBatch(incoming);
         return true;
       case NOT_YET:
@@ -149,6 +151,7 @@ class PartitionSenderRootExec implements RootExec {
     List<JVar> RecordCounters = Lists.newArrayList();
     for (VectorWrapper<?> vvIn : incoming) {
       incomingVVs.add(cg.declareVectorValueSetupAndMember("incoming", new TypedFieldId(vvIn.getField().getType(), fieldId++, vvIn.isHyper())));
+      System.out.println("Incoming VV " + (fieldId-1) + ":  " + vvIn);
     }
 
     int batchId = 0;
@@ -160,18 +163,20 @@ class PartitionSenderRootExec implements RootExec {
       JBlock caseBlock = switchStatement._case(JExpr.lit(batchId)).body();
       for (VectorWrapper<?> vv : batch) {
         // declare outgoing value vector and a corresponding counter
-        JVar outVV = cg.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(vv.getField().getType(), fieldId, false));
+        System.out.println("Batch VV " + batchId + ":  " + vv);
+        JVar outVV = cg.declareVectorValueSetupAndMember("outgoing[" + batchId + "]", new TypedFieldId(vv.getField().getType(), fieldId, false));
         JVar outVVCounter = cg.declareClassField("recordCount", cg.getModel().ref(Integer.class));
         caseBlock.add(outVV.invoke("copyFrom").arg(inIndex).arg(outVVCounter.incr()).arg(incomingVVs.get(fieldId)));
         ++fieldId;
       }
+      fieldId = 0;
       caseBlock._break();
       ++batchId;
     }
     
     try {
       // compile and setup generated code
-      partitioner = context.getImplementationClass(cg);
+      partitioner = context.getImplementationClassMultipleOutput(cg);
       partitioner.setup(context, incoming, outgoing);
 
     } catch (ClassTransformationException | IOException e) {

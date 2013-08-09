@@ -27,7 +27,7 @@ import java.util.List;
 public abstract class PartitionerTemplate implements Partitioner {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PartitionerTemplate.class);
 
-  private List<OutgoingRecordBatch> outgoing;
+  private OutgoingRecordBatch[] outgoing;
   
   public PartitionerTemplate() throws SchemaChangeException {
   }
@@ -35,11 +35,11 @@ public abstract class PartitionerTemplate implements Partitioner {
   @Override
   public final void setup(FragmentContext context,
                           RecordBatch incoming,
-                          List<OutgoingRecordBatch> outgoing) throws SchemaChangeException {
+                          OutgoingRecordBatch[] outgoing) throws SchemaChangeException {
 
     this.outgoing = outgoing;
     // TODO: generate reference to List<outgoing> instead of single function param
-    doSetup(context, incoming, outgoing.get(0));
+    doSetup(context, incoming, outgoing);
 
   }
 
@@ -52,13 +52,13 @@ public abstract class PartitionerTemplate implements Partitioner {
       // TODO: inject partitioning expression
       int hash = 0;
       // TODO: if attempting to insert too large of a value, send the batch, re-createPartitioner() and try again
-      doEval(recordId, hash % outgoing.size());
+      doEval(recordId, hash % outgoing.length);
       // TODO: if outgoing batch is full, send it
     }
 
   }
 
-  protected abstract void doSetup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing) throws SchemaChangeException;
+  protected abstract void doSetup(FragmentContext context, RecordBatch incoming, OutgoingRecordBatch[] outgoing) throws SchemaChangeException;
   protected abstract void doEval(int inIndex, int outIndex);
 
 }

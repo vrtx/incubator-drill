@@ -29,7 +29,7 @@ public interface Partitioner {
 
   public abstract void setup(FragmentContext context,
                              RecordBatch incoming,
-                             List<OutgoingRecordBatch> outgoing) throws SchemaChangeException;
+                             OutgoingRecordBatch[] outgoing) throws SchemaChangeException;
 
   public abstract void partitionBatch(RecordBatch incoming);
   
