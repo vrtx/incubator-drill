@@ -41,7 +41,7 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     // we do this in the here instead of the constructor because don't necessary want to start consuming on construction.
     status.ensureInitial();
     
-    // loop so we can start over again if we fund a new batch was created.
+    // loop so we can start over again if we find a new batch was created.
     while(true){
       
       boolean first = false;
