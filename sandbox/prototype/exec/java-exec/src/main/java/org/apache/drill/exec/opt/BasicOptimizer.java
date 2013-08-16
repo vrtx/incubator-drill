@@ -134,11 +134,8 @@ public class BasicOptimizer extends Optimizer{
       TypeProtos.MajorType.Builder b = TypeProtos.MajorType.getDefaultInstance().newBuilderForType();
       b.setMode(DataMode.REQUIRED);
       b.setMinorType(MinorType.BIGINT);
-
-      return new SelectionVectorRemover(new org.apache.drill.exec.physical.config.Filter(filter.iterator().next()
-          .accept(this, obj), /* filter.getExpr() */
-      new FunctionCall(FunctionDefinition.simple("alternate", new NoArgValidator(), new OutputTypeDeterminer.FixedType(
-          b.build())), null, new ExpressionPosition("asdf", 1)), 1.0f));
+      PhysicalOperator child = filter.iterator().next().accept(this, obj);
+      return new SelectionVectorRemover(new org.apache.drill.exec.physical.config.Filter(child, filter.getExpr(), 1.0f));
     }
 
   }

@@ -25,15 +25,16 @@ public class DrillFullImpl<E>{
     this.fields = fields;
   }
 
-  public Enumerator<E> enumerator(DrillTable table) {
+  @SuppressWarnings("unchecked")
+  public Enumerator<E> enumerator(DrillClient client) {
     
     BatchListener listener = new BatchListener();
 
     // TODO: use a completion service from the container
-    QueryRequestRunner runner = new QueryRequestRunner(plan, table.client, listener);
+    QueryRequestRunner runner = new QueryRequestRunner(plan, client, listener);
     runner.start();
     
-    return (Enumerator<E>) new ResultEnumerator(listener, table.bit.getContext(),fields);
+    return (Enumerator<E>) new ResultEnumerator(listener, client, fields);
     
   }
   
@@ -52,13 +53,7 @@ public class DrillFullImpl<E>{
 
     @Override
     public void run() {
-      try {
-        client.connect();
-        client.runQuery(UserProtos.QueryType.LOGICAL, plan, listener);
-      } catch (RpcException e) {
-        listener.submissionFailed(e);
-      }
-      
+      client.runQuery(UserProtos.QueryType.LOGICAL, plan, listener);
     }
   }
 }

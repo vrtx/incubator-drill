@@ -18,6 +18,7 @@
 package org.apache.drill.exec.store.parquet;
 
 import io.netty.buffer.ByteBuf;
+
 import org.apache.drill.common.exceptions.DrillRuntimeException;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.ExpressionPosition;
@@ -35,6 +36,9 @@ import org.apache.drill.exec.vector.ValueVector;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+
+import com.google.common.base.Joiner;
+
 import parquet.column.ColumnDescriptor;
 import parquet.hadoop.CodecFactoryExposer;
 import parquet.hadoop.metadata.ColumnChunkMetaData;
@@ -260,7 +264,7 @@ public class ParquetRecordReader implements RecordReader {
   }
 
   private static String toFieldName(String[] paths) {
-    return join(SEPERATOR, paths);
+    return Joiner.on('/').join(paths);
   }
 
   private TypeProtos.DataMode getDataMode(ColumnDescriptor column, MessageType schema) {

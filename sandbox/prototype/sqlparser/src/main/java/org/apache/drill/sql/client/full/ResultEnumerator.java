@@ -1,13 +1,12 @@
 package org.apache.drill.sql.client.full;
 
 import java.util.List;
-import java.util.Map;
 
 import net.hydromatic.linq4j.Enumerator;
 
+import org.apache.drill.exec.client.DrillClient;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.rpc.RpcException;
-import org.apache.drill.exec.server.DrillbitContext;
 
 /**
    * Enumerator used for full execution engine.
@@ -17,8 +16,8 @@ import org.apache.drill.exec.server.DrillbitContext;
     private final BatchLoaderMap loaderMap;
     private Object current;
     
-    public ResultEnumerator(BatchListener listener, DrillbitContext context, List<String> fields) {
-      this.loaderMap = new BatchLoaderMap(fields, listener, context);
+    public ResultEnumerator(BatchListener listener, DrillClient client, List<String> fields) {
+      this.loaderMap = new BatchLoaderMap(fields, listener, client);
     }
 
     public Object current() {

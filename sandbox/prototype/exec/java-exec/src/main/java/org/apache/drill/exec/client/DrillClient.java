@@ -121,10 +121,8 @@ public class DrillClient implements Closeable{
 
   /**
    * Closes this client's connection to the server
-   *
-   * @throws IOException
    */
-  public void close() throws IOException {
+  public void close(){
     this.client.close();
     connected = false;
   }

@@ -18,10 +18,16 @@
 package org.apache.drill.optiq;
 
 import net.hydromatic.linq4j.Ord;
+
+import org.apache.drill.exec.client.DrillClient;
 import org.eigenbase.rel.RelNode;
 import org.eigenbase.relopt.RelOptPlanner;
 import org.eigenbase.reltype.RelDataTypeField;
-import org.eigenbase.rex.*;
+import org.eigenbase.rex.RexCall;
+import org.eigenbase.rex.RexInputRef;
+import org.eigenbase.rex.RexLiteral;
+import org.eigenbase.rex.RexNode;
+import org.eigenbase.rex.RexVisitorImpl;
 import org.eigenbase.sql.SqlSyntax;
 import org.eigenbase.sql.fun.SqlStdOperatorTable;
 
@@ -29,8 +35,8 @@ import org.eigenbase.sql.fun.SqlStdOperatorTable;
  * Utilities for Drill's planner.
  */
 public class DrillOptiq {
-  static void registerStandardPlannerRules(RelOptPlanner planner) {
-    planner.addRule(EnumerableDrillRule.ARRAY_INSTANCE);
+  static void registerStandardPlannerRules(RelOptPlanner planner, DrillClient client) {
+    planner.addRule(EnumerableDrillRule.getInstance(client));
 
     // planner.addRule(DrillTableModificationConverterRule.INSTANCE);
     // planner.addRule(DrillCalcConverterRule.INSTANCE);

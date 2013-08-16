@@ -8,12 +8,12 @@ import java.util.Set;
 
 import jline.internal.Preconditions;
 
+import org.apache.drill.exec.client.DrillClient;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.record.RecordBatchLoader;
 import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.rpc.RpcException;
 import org.apache.drill.exec.rpc.user.QueryResultBatch;
-import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.vector.ValueVector;
 
 import com.fasterxml.jackson.core.JsonGenerationException;
@@ -36,11 +36,11 @@ public class BatchLoaderMap implements Map<String, Object> {
   private int index;
   private Object[] objArr;
 
-  public BatchLoaderMap(List<String> requestedFields, BatchListener listener, DrillbitContext context) {
+  public BatchLoaderMap(List<String> requestedFields, BatchListener listener, DrillClient client) {
     this.listener = listener;
     this.requestedFields = requestedFields;
     this.objArr = new Object[requestedFields.size()];
-    this.loader = new RecordBatchLoader(context.getAllocator());
+    this.loader = new RecordBatchLoader(client.getAllocator());
   }
 
   private void load(QueryResultBatch batch) throws SchemaChangeException {
@@ -83,7 +83,7 @@ public class BatchLoaderMap implements Map<String, Object> {
   public Object getCurrentAsObjectArray() {
     
     for (int i = 0; i < requestedFields.size(); i++) {
-      ValueVector vv = fields.get(requestedFields.get(i));
+      ValueVector vv = fields.get(requestedFields.get(i).toLowerCase());
       if (vv == null) {
         objArr[i] = null;
       } else {
