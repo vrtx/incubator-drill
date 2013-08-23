@@ -1,0 +1,47 @@
+{
+  head:{
+    type:"APACHE_DRILL_PHYSICAL",
+    version:"1",
+    generator:{
+      type:"manual"
+    }
+  },
+  graph:[
+    {
+      @id:1,
+      pop:"mock-sub-scan",
+      url: "http://source1.apache.org",
+      entries:[
+        {records: 100, types: [
+          {name: "blue", type: "INT", mode: "OPTIONAL"},
+          {name: "red", type: "INT", mode: "OPTIONAL"},
+          {name: "green", type: "INT", mode: "OPTIONAL"}
+        ]}
+      ]
+    },
+    {
+      @id:2,
+      pop:"mock-sub-scan",
+      url: "http://source2.apache.org",
+      entries:[
+        {records: 100, types: [
+          {name: "blue1", type: "INT", mode: "OPTIONAL"},
+          {name: "red1", type: "INT", mode: "OPTIONAL"},
+          {name: "green1", type: "INT", mode: "OPTIONAL"}
+        ]}
+      ]
+    },
+    {
+      @id: 3,
+      right: 1,
+      left: 2,
+      pop: "merge-join",
+      join-conditions: [ {relationship: "==", left: 1, right: 2} ]
+    },
+    {
+      @id: 4,
+      child: 3,
+      pop: "screen"
+    }
+  ]
+}

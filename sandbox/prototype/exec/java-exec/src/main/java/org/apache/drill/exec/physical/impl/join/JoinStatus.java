@@ -15,16 +15,16 @@ public final class JoinStatus {
     INCOMING_BATCHES, QUEUED_BATCHES;
   }
 
-  public int leftPosition;
+  private int leftPosition;
   private final RecordBatch left;
   private IterOutcome lastLeft;
 
-  public int rightPosition;
-  public int svRightPosition;
+  private int rightPosition;
+  private int svRightPosition;
   private final RecordBatch right;
   private IterOutcome lastRight;
   
-  public int outputPosition;
+  private int outputPosition;
   public RightSourceMode rightSourceMode = RightSourceMode.INCOMING_BATCHES;
   public MergeJoinBatch outputBatch;
   public SelectionVector4 sv4;
@@ -54,9 +54,8 @@ public final class JoinStatus {
   public final void advanceRight(){
     if (rightSourceMode == RightSourceMode.INCOMING_BATCHES)
       rightPosition++;
-    else {
-      // advance through queued batches
-    }
+    // only advance the right position
+    // advance through queued batches
   }
 
   public final int getLeftPosition() {
@@ -67,9 +66,34 @@ public final class JoinStatus {
     return (rightSourceMode == RightSourceMode.INCOMING_BATCHES) ? rightPosition : svRightPosition;
   }
 
+  public final void setRightPosition(int pos) {
+    rightPosition = pos;
+  }
+
+
+  public final int getOutPosition() {
+    return outputPosition;
+  }
+
+  public final int fetchAndIncOutputPos() {
+    return outputPosition++;
+  }
+
+  public final void resetOutputPos() {
+    outputPosition = 0;
+  }
+
+  public final RecordBatch getLeftBatch() {
+    return left;
+  }
+
+  public final RecordBatch getRightBatch() {
+    return right;
+  }
+
   public final void notifyLeftRepeating() {
     leftRepeating = true;
-    outputBatch.resetBatchBuilder();
+//    outputBatch.resetBatchBuilder();
   }
 
   public final void notifyLeftStoppedRepeating() {
@@ -110,7 +134,7 @@ public final class JoinStatus {
    * Side effect: advances to next right batch if current right batch size is exceeded
    */
   public final boolean isRightPositionAllowed(){
-    if(isNextRightPositionInCurrentBatch()){
+    if(!isNextRightPositionInCurrentBatch()){
       rightPosition = 0;
       lastRight = right.next();
       return lastRight == IterOutcome.OK;
