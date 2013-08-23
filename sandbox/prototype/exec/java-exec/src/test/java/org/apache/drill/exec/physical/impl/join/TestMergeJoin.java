@@ -18,6 +18,7 @@
 
 package org.apache.drill.exec.physical.impl.join;
 
+import com.beust.jcommander.internal.Lists;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import com.yammer.metrics.MetricRegistry;
@@ -26,7 +27,6 @@ import mockit.NonStrictExpectations;
 import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.common.util.FileUtils;
 import org.apache.drill.exec.expr.fn.FunctionImplementationRegistry;
-import org.apache.drill.exec.expr.holders.ValueHolder;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.PhysicalPlan;
@@ -36,8 +36,6 @@ import org.apache.drill.exec.physical.impl.SimpleRootExec;
 import org.apache.drill.exec.planner.PhysicalPlanReader;
 import org.apache.drill.exec.proto.CoordinationProtos;
 import org.apache.drill.exec.proto.ExecProtos;
-import org.apache.drill.exec.proto.UserProtos;
-import org.apache.drill.exec.rpc.user.QueryResultBatch;
 import org.apache.drill.exec.rpc.user.UserServer;
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.vector.ValueVector;
@@ -123,18 +121,19 @@ public class TestMergeJoin {
 
     int totalRecordCount = 0;
     while (exec.next()) {
-      System.out.println("got next with record count: " + exec.getRecordCount() + " (total: " + totalRecordCount + ") \n");
       totalRecordCount += exec.getRecordCount();
-      for (ValueVector v : exec)
-        System.out.print(v.getField().getName() + "       ");
-      System.out.println("\n----");
+      System.out.println("got next with record count: " + exec.getRecordCount() + " (total: " + totalRecordCount + "):");
+      System.out.println("       t1                 t2");
+                          
       for (int valueIdx = 0; valueIdx < exec.getRecordCount(); valueIdx++) {
-        List<Object> row = new ArrayList();
-        for (ValueVector v : exec) {
-          row.add(v.getAccessor().getObject(valueIdx));
-        }
+        List<Object> row = Lists.newArrayList();
+        for (ValueVector v : exec)
+          row.add(v.getField().getName() + ":" + v.getAccessor().getObject(valueIdx));
         for (Object cell : row) {
-          if (cell == null) continue;
+          if (cell == null) {
+            System.out.print("[NULL]    ");
+            continue;
+          }
           int len = cell.toString().length();
           System.out.print(cell);
           for (int i = 0; i < (10 - len); ++i)
@@ -142,14 +141,14 @@ public class TestMergeJoin {
         }
         System.out.println();
       }
-      assertEquals(12, exec.getRecordCount());
+      assertEquals(25, exec.getRecordCount());
     }
-    System.out.println("-------------------");
     System.out.println("Total Record Count: " + totalRecordCount);
     if (context.getFailureCause() != null)
       throw context.getFailureCause();
     assertTrue(!context.isFailed());
 
+    Thread.sleep(3000);
   }
 
 }

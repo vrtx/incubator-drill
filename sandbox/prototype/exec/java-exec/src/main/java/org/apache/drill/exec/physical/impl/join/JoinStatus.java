@@ -52,7 +52,7 @@ public final class JoinStatus {
   }
 
   public final void advanceRight(){
-    if (rightSourceMode == RightSourceMode.INCOMING_BATCHES)
+//    if (rightSourceMode == RightSourceMode.INCOMING_BATCHES)
       rightPosition++;
     // only advance the right position
     // advance through queued batches
@@ -63,7 +63,8 @@ public final class JoinStatus {
   }
 
   public final int getRightPosition() {
-    return (rightSourceMode == RightSourceMode.INCOMING_BATCHES) ? rightPosition : svRightPosition;
+    return rightPosition;
+//    return (rightSourceMode == RightSourceMode.INCOMING_BATCHES) ? rightPosition : svRightPosition;
   }
 
   public final void setRightPosition(int pos) {
