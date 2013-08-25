@@ -26,7 +26,7 @@
       left: 1,
       right: 2,
       pop: "merge-join",
-      join-conditions: [ { relationship: "==", left: 1, right: 2 } ]
+      join-conditions: [ { relationship: "==", left: "a", right: "aa" } ]
     },
     {
       @id: 4,

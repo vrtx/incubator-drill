@@ -2,9 +2,16 @@ package org.apache.drill.exec.physical.impl.join;
 
 import java.io.IOException;
 
+import com.sun.codemodel.*;
+import org.apache.drill.common.expression.ErrorCollector;
+import org.apache.drill.common.expression.ErrorCollectorImpl;
+import org.apache.drill.common.expression.LogicalExpression;
+import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.CodeGenerator;
+import org.apache.drill.exec.expr.ExpressionTreeMaterializer;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.MergeJoinPOP;
 import org.apache.drill.exec.physical.impl.join.JoinWorker.JoinOutcome;
@@ -23,6 +30,7 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
   private final RecordBatch right;
   private final JoinStatus status;
   private JoinWorker worker;
+  private JoinCondition condition;
   public MergeJoinBatchBuilder batchBuilder;
   
   protected MergeJoinBatch(MergeJoinPOP popConfig, FragmentContext context, RecordBatch left, RecordBatch right) {
@@ -31,6 +39,9 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     this.right = right;
     this.status = new JoinStatus(left, right, this);
     this.batchBuilder = new MergeJoinBatchBuilder(context, status);
+    this.condition = popConfig.getConditions().get(0);
+    // currently only one join condition is supported
+    assert popConfig.getConditions().size() == 1;
   }
 
   @Override
@@ -65,11 +76,11 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
           status.getOutcome() == JoinOutcome.SCHEMA_CHANGED)
         allocateBatch();
 
-      // reset the output position to zero after processing a batch
+      // reset the output position to zero after our parent iterates this RecordBatch
       if (status.getOutcome() == JoinOutcome.BATCH_RETURNED ||
           status.getOutcome() == JoinOutcome.SCHEMA_CHANGED ||
           status.getOutcome() == JoinOutcome.NO_MORE_DATA)
-      status.resetOutputPos();
+       status.resetOutputPos();
 
       // join until we have a complete outgoing batch
       worker.doJoin(status);
@@ -119,8 +130,38 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
   }
 
   private JoinWorker getNewWorker() throws ClassTransformationException, IOException{
-    CodeGenerator<JoinWorker> cg = new CodeGenerator<JoinWorker>(JoinWorker.TEMPLATE_DEFINITION, context.getFunctionRegistry());
 
+    CodeGenerator<JoinWorker> cg = new CodeGenerator<JoinWorker>(JoinWorker.TEMPLATE_DEFINITION, context.getFunctionRegistry());
+    final ErrorCollector collector = new ErrorCollectorImpl();
+    final LogicalExpression leftFieldExpr = condition.getLeft();
+    final LogicalExpression rightFieldExpr = condition.getRight();
+
+    final LogicalExpression materializedLeftExpr = ExpressionTreeMaterializer.materialize(leftFieldExpr, left, collector);
+    if (collector.hasErrors())
+      throw new ClassTransformationException(String.format(
+          "Failure while trying to materialize incoming left schema.  Errors:\n %s.", collector.toErrorString()));
+
+    final LogicalExpression materializedRightExpr = ExpressionTreeMaterializer.materialize(rightFieldExpr, right, collector);
+    if (collector.hasErrors())
+      throw new ClassTransformationException(String.format(
+          "Failure while trying to materialize incoming right schema.  Errors:\n %s.", collector.toErrorString()));
+
+    // generate evaluate expression to determine the hash
+    CodeGenerator.HoldingContainer leftExprHolder = cg.addExpr(materializedLeftExpr);
+    CodeGenerator.HoldingContainer rightExprHolder = cg.addExpr(materializedRightExpr);
+
+    JClass schemaPathClass = cg.getModel().ref(SchemaPath.class);
+    JVar leftSchemaPath = cg.clazz.field(JMod.NONE,
+        schemaPathClass,
+        "leftSchemaPath");
+    cg.getSetupBlock().assign(leftSchemaPath, leftExprHolder.getHolder());
+
+    JVar rightSchemaPath = cg.clazz.field(JMod.NONE,
+        schemaPathClass,
+        "rightSchemaPath");
+    cg.getSetupBlock().assign(rightSchemaPath, rightExprHolder.getValue());
+    
+    
     if (status.rightSourceMode == JoinStatus.RightSourceMode.INCOMING_BATCHES) {
       // generate direct copier.
       // for each 
@@ -132,11 +173,8 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     
     // generate compareNextLeftKey.
 
-    // TODO: temp stubs are implemented for now; switch to CG
-    JoinWorker w = new JoinTemplate();
+    JoinWorker w = context.getImplementationClass(cg);
     w.setupJoin(status, this.container);
-//  JoinWorker w = context.getImplementationClass(cg);
-//  w.setupJoin(status, this.container);
     return w;
   }
 
