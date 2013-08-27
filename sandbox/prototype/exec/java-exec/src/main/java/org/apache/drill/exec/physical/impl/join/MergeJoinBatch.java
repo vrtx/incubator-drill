@@ -15,8 +15,7 @@ import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.MergeJoinPOP;
 import org.apache.drill.exec.physical.impl.join.JoinWorker.JoinOutcome;
 import org.apache.drill.exec.record.*;
-import org.apache.drill.exec.vector.NullableIntVector;
-import org.apache.drill.exec.vector.TypeHelper;
+import org.apache.drill.exec.vector.*;
 
 /**
  * A merge join combining to incoming in-order batches.
@@ -258,7 +257,7 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
                                                       new TypedFieldId(vw.getField().getType(), vectorId));
       JVar vvOut = cg.declareVectorValueSetupAndMember("outgoing",
                                                        new TypedFieldId(vw.getField().getType(),vectorId), true);
-
+      // todo: check for room in vvOut
       cg.getEvalBlock().add(vvOut.invoke("copyFrom")
                                    .arg(JoinInnerSignature.COPY_LEFT_MAPPING.getValueReadIndex())
                                    .arg(JoinInnerSignature.COPY_LEFT_MAPPING.getValueWriteIndex())
@@ -286,17 +285,6 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     }
     cg.getEvalBlock()._return(JExpr.lit(true));
 
-
-
-
-//    if (status.rightSourceMode == JoinStatus.RightSourceMode.INCOMING_BATCHES) {
-//      // generate direct copier.
-//      // for each 
-//    } else {
-//      // generate copier which deref's SV4
-//    }
-
-
     JoinWorker w = context.getImplementationClass(cg);
     w.setupJoin(context, status, this.container);
     return w;
@@ -308,22 +296,63 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
 
     // add fields from both batches
     for (VectorWrapper w : left) {
-      logger.debug("Adding left join vector: {}", w.getValueVector().getField());
-      NullableIntVector v = (NullableIntVector)TypeHelper.getNewVector(w.getField(), context.getAllocator());
-      v.allocateNew(w.getValueVector().getValueCapacity());
-      container.add(v);
+      ValueVector outgoingVector = TypeHelper.getNewVector(w.getField(), context.getAllocator());
+      getAllocator(w.getValueVector(), outgoingVector).alloc(left.getRecordCount() * 4);
+      container.add(outgoingVector);
     }
 
     for (VectorWrapper w : right) {
-      // todo: handle duplicate field names
-      logger.debug("Adding right join vector: {}", w.getValueVector().getField());
-      NullableIntVector v = (NullableIntVector)TypeHelper.getNewVector(w.getField(), context.getAllocator());
-      v.allocateNew(w.getValueVector().getValueCapacity());
-      container.add(v);
+      ValueVector outgoingVector = TypeHelper.getNewVector(w.getField(), context.getAllocator());
+      getAllocator(w.getValueVector(), outgoingVector).alloc(right.getRecordCount() * 4);
+      container.add(outgoingVector);
     }
 
     container.buildSchema(BatchSchema.SelectionVectorMode.NONE);
     logger.debug("Built joined schema: {}", container.getSchema());
-
   }
+
+  private VectorAllocator getAllocator(ValueVector in, ValueVector outgoing){
+    if(outgoing instanceof FixedWidthVector){
+      return new FixedVectorAllocator((FixedWidthVector) outgoing);
+    }else if(outgoing instanceof VariableWidthVector && in instanceof VariableWidthVector){
+      return new VariableVectorAllocator( (VariableWidthVector) in, (VariableWidthVector) outgoing);
+    }else{
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  private class FixedVectorAllocator implements VectorAllocator{
+    FixedWidthVector out;
+
+    public FixedVectorAllocator(FixedWidthVector out) {
+      super();
+      this.out = out;
+    }
+
+    public void alloc(int recordCount){
+      out.allocateNew(recordCount);
+      out.getMutator().setValueCount(recordCount);
+    }
+  }
+
+  private class VariableVectorAllocator implements VectorAllocator{
+    VariableWidthVector in;
+    VariableWidthVector out;
+
+    public VariableVectorAllocator(VariableWidthVector in, VariableWidthVector out) {
+      super();
+      this.in = in;
+      this.out = out;
+    }
+
+    public void alloc(int recordCount){
+      out.allocateNew(in.getByteCapacity(), recordCount);
+      out.getMutator().setValueCount(recordCount);
+    }
+  }
+
+  public interface VectorAllocator{
+    public void alloc(int recordCount);
+  }
+
 }
