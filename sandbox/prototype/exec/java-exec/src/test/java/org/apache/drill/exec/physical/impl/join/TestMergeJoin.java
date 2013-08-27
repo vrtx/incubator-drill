@@ -92,8 +92,9 @@ public class TestMergeJoin {
         }
         System.out.println();
       }
-      assertEquals(100, exec.getRecordCount());
+      System.out.println();
     }
+    assertEquals(100, totalRecordCount);
     System.out.println("Total Record Count: " + totalRecordCount);
     if (context.getFailureCause() != null)
       throw context.getFailureCause();

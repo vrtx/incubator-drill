@@ -112,7 +112,7 @@ public final class JoinStatus {
    * Side effect: advances to next left batch if current left batch size is exceeded.
    */
   public final boolean isLeftPositionAllowed(){
-    if(!isNextLeftPositionInCurrentBatch()){
+    if(!isLeftPositionInCurrentBatch()){
       leftPosition = 0;
       lastLeft = left.next();
       return lastLeft == IterOutcome.OK;
@@ -127,7 +127,7 @@ public final class JoinStatus {
    * Side effect: advances to next right batch if current right batch size is exceeded
    */
   public final boolean isRightPositionAllowed(){
-    if(!isNextRightPositionInCurrentBatch()){
+    if(!isRightPositionInCurrentBatch()){
       rightPosition = 0;
       lastRight = right.next();
       return lastRight == IterOutcome.OK;
@@ -141,15 +141,29 @@ public final class JoinStatus {
   /**
    * Check if the left record position can advance by one in the current batch.
    */
-  public final boolean isNextLeftPositionInCurrentBatch() {
+  public final boolean isLeftPositionInCurrentBatch() {
     return leftPosition < left.getRecordCount();
   }
 
   /**
-   * Check if the left record position can advance by one in the current batch.
+   * Check if the right record position can advance by one in the current batch.
+   */
+  public final boolean isRightPositionInCurrentBatch() {
+    return rightPosition < right.getRecordCount();
+  }
+
+  /**
+   * Check if the next left record position can advance by one in the current batch.
+   */
+  public final boolean isNextLeftPositionInCurrentBatch() {
+    return leftPosition + 1 < left.getRecordCount();
+  }
+
+  /**
+   * Check if the next left record position can advance by one in the current batch.
    */
   public final boolean isNextRightPositionInCurrentBatch() {
-    return rightPosition < right.getRecordCount();
+    return rightPosition + 1 < right.getRecordCount();
   }
 
   public JoinOutcome getOutcome(){

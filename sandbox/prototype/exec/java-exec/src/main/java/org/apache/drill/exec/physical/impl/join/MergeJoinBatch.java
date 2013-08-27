@@ -181,7 +181,7 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     cg.getSetupBlock().assign(JExpr._this().ref(incomingRecordBatch), JExpr._this().ref(incomingRightRecordBatch));
     CodeGenerator.HoldingContainer compareRightExprHolder = cg.addExpr(materializedRightExpr, false);
 
-    if (compareLeftExprHolder.isOptional() || compareRightExprHolder.isOptional()) {
+    if (compareLeftExprHolder.isOptional() && compareRightExprHolder.isOptional()) {
       // handle null == null
       cg.getEvalBlock()._if(compareLeftExprHolder.getIsSet().eq(JExpr.lit(0))
           .cand(compareRightExprHolder.getIsSet().eq(JExpr.lit(0))))
@@ -191,6 +191,18 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
       // handle null == !null
       cg.getEvalBlock()._if(compareLeftExprHolder.getIsSet().eq(JExpr.lit(0))
           .cor(compareRightExprHolder.getIsSet().eq(JExpr.lit(0))))
+          ._then()
+          ._return(JExpr.lit(1));
+
+    } else if (compareLeftExprHolder.isOptional()) {
+      // handle null == required (null is less than any value)
+      cg.getEvalBlock()._if(compareLeftExprHolder.getIsSet().eq(JExpr.lit(0)))
+          ._then()
+          ._return(JExpr.lit(-1));
+
+    } else if (compareRightExprHolder.isOptional()) {
+      // handle required == null (null is less than any value)
+      cg.getEvalBlock()._if(compareRightExprHolder.getIsSet().eq(JExpr.lit(0)))
           ._then()
           ._return(JExpr.lit(1));
     }
@@ -225,7 +237,7 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     cg.setMappingSet(JoinInnerSignature.COMPARE_NEXT_LEFT_MAPPING); // change mapping from 'leftIndex' to 'nextLeftIndex'
     CodeGenerator.HoldingContainer compareNextLeftExprHolder = cg.addExpr(materializedLeftExpr, false);
 
-    if (compareThisLeftExprHolder.isOptional() || compareNextLeftExprHolder.isOptional()) {
+    if (compareThisLeftExprHolder.isOptional()) {
       // handle null == null
       cg.getEvalBlock()._if(compareThisLeftExprHolder.getIsSet().eq(JExpr.lit(0))
                             .cand(compareNextLeftExprHolder.getIsSet().eq(JExpr.lit(0))))
