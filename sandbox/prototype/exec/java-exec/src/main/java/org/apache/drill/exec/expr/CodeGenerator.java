@@ -108,11 +108,16 @@ public class CodeGenerator<T>{
 //  public JBlock getCleanupBlock(){
 //    return getBlock(getCurrentMapping().getCleanup());
 //  }
-    
-  public JVar declareVectorValueSetupAndMember(String batchName, TypedFieldId fieldId){
+
+  public JVar declareVectorValueSetupAndMember(String batchName, TypedFieldId fieldId) {
+    return declareVectorValueSetupAndMember(batchName, fieldId, false);
+  }
+
+  public JVar declareVectorValueSetupAndMember(String batchName, TypedFieldId fieldId, boolean isVectorContainer) {
     Class<?> valueVectorClass = TypeHelper.getValueVectorClass(fieldId.getType().getMinorType(), fieldId.getType().getMode());
     JClass vvClass = model.ref(valueVectorClass);
     JClass retClass = vvClass;
+    String accessorMethod = isVectorContainer ? "getVectorAccessor" : "getValueAccessorById";
     String vectorAccess = "getValueVector";
     if(fieldId.isHyperReader()){
       retClass = retClass.array();
@@ -127,7 +132,7 @@ public class CodeGenerator<T>{
         objClass, //
         getNextVar("tmp"), // 
         JExpr.direct(batchName)
-          .invoke("getValueAccessorById") //
+          .invoke(accessorMethod) //
           .arg(JExpr.lit(fieldId.getFieldId())) //
           .arg( vvClass.dotclass())
           .invoke(vectorAccess)//

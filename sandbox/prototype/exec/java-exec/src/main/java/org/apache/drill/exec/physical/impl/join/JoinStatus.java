@@ -15,13 +15,13 @@ public final class JoinStatus {
     INCOMING_BATCHES, QUEUED_BATCHES;
   }
 
+  public final RecordBatch left;
   private int leftPosition;
-  private final RecordBatch left;
   private IterOutcome lastLeft;
 
+  public final RecordBatch right;
   private int rightPosition;
   private int svRightPosition;
-  private final RecordBatch right;
   private IterOutcome lastRight;
   
   private int outputPosition;
@@ -82,14 +82,6 @@ public final class JoinStatus {
 
   public final void resetOutputPos() {
     outputPosition = 0;
-  }
-
-  public final RecordBatch getLeftBatch() {
-    return left;
-  }
-
-  public final RecordBatch getRightBatch() {
-    return right;
   }
 
   public final void notifyLeftRepeating() {

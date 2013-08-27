@@ -1,9 +1,8 @@
 package org.apache.drill.exec.physical.impl.join;
 
+import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.VectorContainer;
-import org.apache.drill.exec.record.VectorWrapper;
-import org.apache.drill.exec.vector.NullableIntVector;
 
 /**
  * This join template uses a merge join to combine two ordered streams into a single larger batch.  When joining
@@ -56,8 +55,8 @@ import org.apache.drill.exec.vector.NullableIntVector;
 public abstract class JoinTemplate implements JoinWorker {
 
   @Override
-  public void setupJoin(JoinStatus status, VectorContainer outgoing) {
-    setup(status.getLeftBatch(), status.getRightBatch(), outgoing);
+  public void setupJoin(FragmentContext context, JoinStatus status, VectorContainer outgoing) {
+    doSetup(context, status, outgoing);
   }
 
   /**
@@ -72,12 +71,12 @@ public abstract class JoinTemplate implements JoinWorker {
       if (!status.isLeftPositionAllowed()) return;
       if (!status.isRightPositionAllowed()) return;
 
-      int comparison = compare(status.getLeftPosition(), status.getRightPosition());
+      int comparison = doCompare(status.getLeftPosition(), status.getRightPosition());
       switch (comparison) {
 
       case -1:
         // left key < right key
-        copyLeft(status.getLeftPosition(), status.fetchAndIncOutputPos());
+        doCopyLeft(status.getLeftPosition(), status.fetchAndIncOutputPos());
         status.advanceLeft();
         continue;
 
@@ -89,12 +88,13 @@ public abstract class JoinTemplate implements JoinWorker {
         // check for repeating values on the left side
         if (!status.isLeftRepeating() &&
             status.isNextLeftPositionInCurrentBatch() &&
-            compareNextLeftKey(status.getLeftPosition()) == 0)
+            doCompareNextLeftKey(status.getLeftPosition()) == 0)
           // subsequent record(s) in the left batch have the same key
           status.notifyLeftRepeating();
+
         else if (status.isLeftRepeating() &&
                  status.isNextLeftPositionInCurrentBatch() &&
-                 compareNextLeftKey(status.getLeftPosition()) != 0)
+                 doCompareNextLeftKey(status.getLeftPosition()) != 0)
           // this record marks the end of repeated keys
           status.notifyLeftStoppedRepeating();
         
@@ -102,9 +102,12 @@ public abstract class JoinTemplate implements JoinWorker {
         int initialRightPosition = status.getRightPosition();
         do {
           // copy all equal right keys to the output record batch
-          if (!copy(status.getLeftPosition(), status.getRightPosition(), status.fetchAndIncOutputPos()))
+          if (!doCopyLeft(status.getLeftPosition(), status.getOutPosition()))
             return;
 
+          if (!doCopyRight(status.getRightPosition(), status.fetchAndIncOutputPos()))
+            return;
+          
 //          // If the left key has duplicates and we're about to cross batch boundaries, queue the
 //          // right table's record batch before calling next.  These records will need to be copied
 //          // again for each duplicate left key.
@@ -113,7 +116,8 @@ public abstract class JoinTemplate implements JoinWorker {
 //            status.outputBatch.addRightToBatchBuilder();
 //          }
           status.advanceRight();
-        } while (status.isRightPositionAllowed() && compare(status.getLeftPosition(), status.getRightPosition()) == 0);
+        } while (status.isRightPositionAllowed() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
+
         if (status.getRightPosition() > initialRightPosition && status.isLeftRepeating())
           // more than one matching result from right table; reset position in case of subsequent left match
           status.setRightPosition(initialRightPosition);
@@ -142,18 +146,17 @@ public abstract class JoinTemplate implements JoinWorker {
 
   // Generated Methods
 
-  public abstract void setup(RecordBatch left, RecordBatch right, VectorContainer outgoing);
+  public abstract void doSetup(FragmentContext context, JoinStatus status, VectorContainer outgoing);
   /**
    * Copy the data to the new record batch (if it fits).
    *
    * @param leftPosition  position of batch (lower 16 bits) and record (upper 16 bits) in left SV4
-   * @param rightPosition position of batch (lower 16 bits) and record (upper 16 bits) in right SV4
    * @param outputPosition position of the output record batch
    * @return Whether or not the data was copied.
    */
-  protected abstract boolean copy(int leftPosition, int rightPosition, int outputPosition);
-  protected abstract boolean copyLeft(int leftPosition, int outputPosition);
-  
+  protected abstract boolean doCopyLeft(int leftPosition, int outputPosition);
+  protected abstract boolean doCopyRight(int rightPosition, int outputPosition);
+
   /**
    * Compare the values of the left and right join key to determine whether the left is less than, greater than
    * or equal to the right.
@@ -164,151 +167,14 @@ public abstract class JoinTemplate implements JoinWorker {
    *         -1 if left is < right
    *          1 if left is > right
    */
-  protected abstract int compare(int leftPosition, int rightPosition);
-  protected abstract int compareNextLeftKey(int position);
+  protected abstract int doCompare(int leftPosition, int rightPosition);
 
-
-//  private Copier copier;
-//  private class Copier {
-//    private RecordBatch left;
-//    private RecordBatch right;
-//    private VectorContainer out;
-//    private VectorWrapper leftKeyVV;
-//    private VectorWrapper rightKeyVV;
-//
-//    public Copier(RecordBatch left,
-//                  RecordBatch right,
-//                  VectorContainer out) {
-//
-//      this.left = left;
-//      this.right = right;
-//      this.out = out;
-//
-//      // TODO: get VV position from field
-//      leftKeyVV = left.getValueAccessorById(0, left.iterator().next().getVectorClass());
-//      rightKeyVV = right.getValueAccessorById(0, right.iterator().next().getVectorClass());
-//    }
-//
-//    public boolean copyRecord(int leftPosition, int rightPosition, int outPosition) {
-//
-//      System.out.format("Copying all records at positions:  left: %s, right: %s, out: %s\n", leftPosition, rightPosition, outPosition);
-//      // copy values from left batch
-//      int outVectorId = 0;
-//      for (VectorWrapper w : left) {
-//        if (w.getValueVector().getValueCapacity() < leftPosition) {
-//          System.out.println("Output has grown too large");
-//          return false;
-//        }
-//
-//        ((NullableIntVector) out.getVectorAccessor(outVectorId, w.getValueVector()
-//            .getField()
-//            .getValueClass())
-//            .getValueVector())
-//            .copyFrom(leftPosition, outPosition, (NullableIntVector) w.getValueVector());
-//        ++outVectorId;
-//      }
-//
-//      // copy values from the right batch
-//      for (VectorWrapper w : right) {
-//        if (w.getValueVector().getValueCapacity() < rightPosition) {
-//          System.out.println("Output has grown too large");
-//          return false;
-//        }
-//
-//        ((NullableIntVector) out.getVectorAccessor(outVectorId, w.getValueVector()
-//            .getField()
-//            .getValueClass())
-//            .getValueVector())
-//            .copyFrom(rightPosition, outPosition, (NullableIntVector) w.getValueVector());
-//        ++outVectorId;
-//      }
-//
-//      return true;
-//    }
-//
-//    public boolean copyLeftRecord(int leftPosition, int outPosition) {
-//      // copy from left batch
-//      System.out.format("Copying left record at positions:  left: %s, out: %s\n", leftPosition, outPosition);
-//      int outVectorId = 0;
-//      for (VectorWrapper w : left) {
-//        if (w.getValueVector().getValueCapacity() < leftPosition) {
-//          System.out.println("Output has grown too large");
-//          return false;
-//        }
-//
-//        ((NullableIntVector) out.getVectorAccessor(outVectorId, w.getValueVector()
-//            .getField()
-//            .getValueClass())
-//            .getValueVector())
-//            .copyFrom(leftPosition, outPosition, (NullableIntVector) w.getValueVector());
-//        ++outVectorId;
-//      }
-//
-//      return true;
-//    }
-//
-//    /**
-//     * Compare the current left and right keys.  Assumes null is less than all values.
-//     */
-//    public int compare(int leftPosition, int rightPosition) {
-//
-//      // handle null values
-//      if (((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().isNull(leftPosition)) {
-//        if (((NullableIntVector) rightKeyVV.getValueVector()).getAccessor().isNull(rightPosition)) {
-//          // null == null
-//          return 0;
-//        } else {
-//          // null == non-null
-//          return -1;
-//        }
-//      } else if (((NullableIntVector) rightKeyVV.getValueVector()).getAccessor().isNull(rightPosition)) {
-//        // non-null == null
-//        return 1;
-//      }
-//
-//      System.out.format("[compare] (%s == %s)\n",
-//                        ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(leftPosition),
-//                        ((NullableIntVector) rightKeyVV.getValueVector()).getAccessor().get(rightPosition));
-//
-//      if (((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(leftPosition) >
-//          ((NullableIntVector) rightKeyVV.getValueVector()).getAccessor().get(rightPosition))
-//        return 1;
-//      else if (((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(leftPosition) <
-//          ((NullableIntVector) rightKeyVV.getValueVector()).getAccessor().get(rightPosition))
-//        return -1;
-//      return 0;
-//    }
-//
-//    /**
-//     * Compare the current and next key in the left table.  Assumes null is less than all values.
-//     * TODO: handle next left position being in another batch
-//     */
-//    public int compareNextLeftKey(int position) {
-//
-//      // handle null values
-//      if (((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().isNull(position) &&
-//          leftKeyVV.getValueVector().getAccessor().getValueCount() > position + 1 &&
-//          ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().isNull(position+1))
-//        return 0;
-//      else if (!((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().isNull(position) &&
-//               leftKeyVV.getValueVector().getAccessor().getValueCount() > position + 1 &&
-//               ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().isNull(position+1))
-//        return -1;
-//      else if (((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().isNull(position))
-//        return 1;
-//      
-//      // handle non-null cases
-//      if (leftKeyVV.getValueVector().getAccessor().getValueCount() > position + 1 &&
-//          ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(position) ==
-//          ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(position+1))
-//        return 0;
-//      if (leftKeyVV.getValueVector().getAccessor().getValueCount() > position + 1 &&
-//          ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(position) >
-//          ((NullableIntVector) leftKeyVV.getValueVector()).getAccessor().get(position+1))
-//        return 1;
-//      return -1;
-//    }
-//
-//  }
+  /**
+   * Compare the current left key to the next left key, if it's within the batch.
+   * @return  0 if both keys are equal
+   *          1 if the keys are not equal
+   *         -1 if there are no more keys in this batch
+   */
+  protected abstract int doCompareNextLeftKey(int position);
 
 }

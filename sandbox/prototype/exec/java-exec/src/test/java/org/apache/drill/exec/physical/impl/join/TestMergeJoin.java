@@ -39,6 +39,7 @@ import org.apache.drill.exec.proto.ExecProtos;
 import org.apache.drill.exec.rpc.user.UserServer;
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.vector.ValueVector;
+import org.junit.AfterClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -141,14 +142,20 @@ public class TestMergeJoin {
         }
         System.out.println();
       }
-      assertEquals(25, exec.getRecordCount());
     }
     System.out.println("Total Record Count: " + totalRecordCount);
+    assertEquals(25, totalRecordCount);
+
     if (context.getFailureCause() != null)
       throw context.getFailureCause();
     assertTrue(!context.isFailed());
 
-    Thread.sleep(3000);
+  }
+
+  @AfterClass
+  public static void tearDown() throws Exception{
+    // pause to get logger to catch up.
+    Thread.sleep(1000);
   }
 
 }
