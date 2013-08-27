@@ -67,9 +67,17 @@ public abstract class JoinTemplate implements JoinWorker {
     while (true) {
       // for each record
 
-      // validate position and advance to the next record batch if necessary
-      if (!status.isLeftPositionAllowed()) return;
-      if (!status.isRightPositionAllowed()) return;
+      // validate input iterators (advancing to the next record batch if necessary)
+      if (!status.isRightPositionAllowed()) {
+        // we've hit the end of the right record batch; copy any remaining values from the left batch
+        while (status.isLeftPositionAllowed()) {
+          doCopyLeft(status.getLeftPosition(), status.fetchAndIncOutputPos());
+          status.advanceLeft();
+        }
+        return;
+      }
+      if (!status.isLeftPositionAllowed())
+        return;
 
       int comparison = doCompare(status.getLeftPosition(), status.getRightPosition());
       switch (comparison) {
@@ -116,7 +124,7 @@ public abstract class JoinTemplate implements JoinWorker {
 //            status.outputBatch.addRightToBatchBuilder();
 //          }
           status.advanceRight();
-        } while (status.isRightPositionAllowed() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
+        } while (status.isNextRightPositionInCurrentBatch() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
 
         if (status.getRightPosition() > initialRightPosition && status.isLeftRepeating())
           // more than one matching result from right table; reset position in case of subsequent left match
