@@ -73,7 +73,7 @@ public class TestMergeJoin {
     while (exec.next()) {
       totalRecordCount += exec.getRecordCount();
       for (ValueVector v : exec)
-        System.out.print("[" + v.getField().getName() + "]         ");
+        System.out.print("[" + v.getField().getName() + "]        ");
       System.out.println("\n");
       for (int valueIdx = 0; valueIdx < exec.getRecordCount(); valueIdx++) {
         List<Object> row = new ArrayList();
@@ -82,11 +82,11 @@ public class TestMergeJoin {
         }
         for (Object cell : row) {
           if (cell == null) { 
-            System.out.print("[NULL]          ");
+            System.out.print("<null>          ");
             continue;
           }
           int len = cell.toString().length();
-          System.out.print("[" + cell + "]");
+          System.out.print(cell);
           for (int i = 0; i < (14 - len); ++i)
             System.out.print(" ");
         }
@@ -133,11 +133,62 @@ public class TestMergeJoin {
           row.add(v.getField().getName() + ":" + v.getAccessor().getObject(valueIdx));
         for (Object cell : row) {
           if (cell == null) {
-            System.out.print("[NULL]    ");
+            System.out.print("<null>    ");
             continue;
           }
           int len = cell.toString().length();
-          System.out.print(cell);
+          System.out.print(cell + " ");
+          for (int i = 0; i < (10 - len); ++i)
+            System.out.print(" ");
+        }
+        System.out.println();
+      }
+    }
+    System.out.println("Total Record Count: " + totalRecordCount);
+    assertEquals(25, totalRecordCount);
+
+    if (context.getFailureCause() != null)
+      throw context.getFailureCause();
+    assertTrue(!context.isFailed());
+
+  }
+
+
+  @Test
+  public void orderedEqualityMultiBatchJoin(@Injectable final DrillbitContext bitContext,
+                                            @Injectable UserServer.UserClientConnection connection) throws Throwable {
+
+    new NonStrictExpectations(){{
+      bitContext.getMetrics(); result = new MetricRegistry("test");
+      bitContext.getAllocator(); result = BufferAllocator.getAllocator(c);
+    }};
+
+    PhysicalPlanReader reader = new PhysicalPlanReader(c, c.getMapper(),CoordinationProtos.DrillbitEndpoint.getDefaultInstance());
+    PhysicalPlan plan = reader.readPhysicalPlan(
+        Files.toString(
+            FileUtils.getResourceAsFile("/join/merge_multi_batch.json"), Charsets.UTF_8)
+            .replace("#{LEFT_FILE}", FileUtils.getResourceAsFile("/join/merge_multi_batch.left.json").toURI().toString())
+            .replace("#{RIGHT_FILE}", FileUtils.getResourceAsFile("/join/merge_multi_batch.right.json").toURI().toString()));
+    FunctionImplementationRegistry registry = new FunctionImplementationRegistry(c);
+    FragmentContext context = new FragmentContext(bitContext, ExecProtos.FragmentHandle.getDefaultInstance(), connection, null, registry);
+    SimpleRootExec exec = new SimpleRootExec(ImplCreator.getExec(context, (FragmentRoot) plan.getSortedOperators(false).iterator().next()));
+
+    int totalRecordCount = 0;
+    while (exec.next()) {
+      totalRecordCount += exec.getRecordCount();
+      System.out.println("got next with record count: " + exec.getRecordCount() + " (total: " + totalRecordCount + "):");
+
+      for (int valueIdx = 0; valueIdx < exec.getRecordCount(); valueIdx++) {
+        List<Object> row = Lists.newArrayList();
+        for (ValueVector v : exec)
+          row.add(v.getField().getName() + ":" + v.getAccessor().getObject(valueIdx));
+        for (Object cell : row) {
+          if (cell == null) {
+            System.out.print("<null>    ");
+            continue;
+          }
+          int len = cell.toString().length();
+          System.out.print(cell + " ");
           for (int i = 0; i < (10 - len); ++i)
             System.out.print(" ");
         }

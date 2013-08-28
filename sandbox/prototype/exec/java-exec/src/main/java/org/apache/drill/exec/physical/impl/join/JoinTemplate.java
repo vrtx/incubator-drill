@@ -1,7 +1,7 @@
 package org.apache.drill.exec.physical.impl.join;
 
+import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.VectorContainer;
 
 /**
@@ -91,8 +91,6 @@ public abstract class JoinTemplate implements JoinWorker {
       case 0:
         // left key == right key
 
-        // TODO: notify left is repeating if next left key matches, but is in a new batch
-
         // check for repeating values on the left side
         if (!status.isLeftRepeating() &&
             status.isNextLeftPositionInCurrentBatch() &&
@@ -106,7 +104,7 @@ public abstract class JoinTemplate implements JoinWorker {
           // this record marks the end of repeated keys
           status.notifyLeftStoppedRepeating();
         
-
+        boolean crossedBatchBoundaries = false;
         int initialRightPosition = status.getRightPosition();
         do {
           // copy all equal right keys to the output record batch
@@ -116,29 +114,38 @@ public abstract class JoinTemplate implements JoinWorker {
           if (!doCopyRight(status.getRightPosition(), status.fetchAndIncOutputPos()))
             return;
           
-//          // If the left key has duplicates and we're about to cross batch boundaries, queue the
-//          // right table's record batch before calling next.  These records will need to be copied
-//          // again for each duplicate left key.
-//          if (status.isLeftRepeating() && !status.isRightPositionInCurrentBatch()) {
-//            // last record in right batch is a duplicate, and at the end of the batch
-//            status.outputBatch.addRightToBatchBuilder();
-//          }
+          // If the left key has duplicates and we're about to cross a boundary in the right batch, add the
+          // right table's record batch to the sv4 builder before calling next.  These records will need to be
+          // copied again for each duplicate left key.
+          if (status.isLeftRepeating() && !status.isNextRightPositionInCurrentBatch()) {
+            status.outputBatch.addRightToBatchBuilder();
+            crossedBatchBoundaries = true;
+          }
           status.advanceRight();
-        } while (status.isRightPositionInCurrentBatch() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
+
+        } while (status.isRightPositionAllowed() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
 
         if (status.getRightPosition() > initialRightPosition && status.isLeftRepeating())
           // more than one matching result from right table; reset position in case of subsequent left match
           status.setRightPosition(initialRightPosition);
         status.advanceLeft();
 
-//        if (status.isLeftRepeating() && compareNextLeftKey(status.getLeftPosition()) != 0) {
-//          // left no longer has duplicates.  switch back to incoming batch mode
-//          status.setDefaultAdvanceMode();
-//          status.notifyLeftStoppedRepeating();
-//        } else if (status.isLeftRepeating()) {
-//          // left is going to repeat; use sv4 for right batch
-//          status.setRepeatedAdvanceMode();
-//        }          
+        if (status.isLeftRepeating() && doCompareNextLeftKey(status.getLeftPosition()) != 0) {
+          // left no longer has duplicates.  switch back to incoming batch mode
+          status.setDefaultAdvanceMode();
+          status.notifyLeftStoppedRepeating();
+        } else if (status.isLeftRepeating() && crossedBatchBoundaries) {
+          try {
+            // build the right batches and 
+            status.outputBatch.batchBuilder.build();
+            status.setSV4AdvanceMode();
+          } catch (SchemaChangeException e) {
+            status.ok = false;
+          }
+          // return to indicate recompile in right-sv4 mode
+          return;
+        }
+
         continue;
 
       case 1:

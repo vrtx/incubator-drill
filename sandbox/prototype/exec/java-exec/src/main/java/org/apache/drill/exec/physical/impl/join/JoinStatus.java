@@ -12,7 +12,7 @@ public final class JoinStatus {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JoinStatus.class);
 
   public static enum RightSourceMode {
-    INCOMING_BATCHES, QUEUED_BATCHES;
+    INCOMING, SV4;
   }
 
   public final RecordBatch left;
@@ -25,10 +25,11 @@ public final class JoinStatus {
   private IterOutcome lastRight;
   
   private int outputPosition;
-  public RightSourceMode rightSourceMode = RightSourceMode.INCOMING_BATCHES;
+  public RightSourceMode rightSourceMode = RightSourceMode.INCOMING;
   public MergeJoinBatch outputBatch;
   public SelectionVector4 sv4;
 
+  public boolean ok = true;
   private boolean initialSet = false;
   private boolean leftRepeating = false;
   
@@ -52,10 +53,10 @@ public final class JoinStatus {
   }
 
   public final void advanceRight(){
-//    if (rightSourceMode == RightSourceMode.INCOMING_BATCHES)
+    if (rightSourceMode == RightSourceMode.INCOMING)
       rightPosition++;
-    // only advance the right position
-    // advance through queued batches
+    else
+      svRightPosition++;
   }
 
   public final int getLeftPosition() {
@@ -63,8 +64,7 @@ public final class JoinStatus {
   }
 
   public final int getRightPosition() {
-    return rightPosition;
-//    return (rightSourceMode == RightSourceMode.INCOMING_BATCHES) ? rightPosition : svRightPosition;
+    return (rightSourceMode == RightSourceMode.INCOMING) ? rightPosition : svRightPosition;
   }
 
   public final void setRightPosition(int pos) {
@@ -86,11 +86,12 @@ public final class JoinStatus {
 
   public final void notifyLeftRepeating() {
     leftRepeating = true;
-//    outputBatch.resetBatchBuilder();
+    outputBatch.resetBatchBuilder();
   }
 
   public final void notifyLeftStoppedRepeating() {
     leftRepeating = false;
+    svRightPosition = 0;
   }
 
   public final boolean isLeftRepeating() {
@@ -98,12 +99,11 @@ public final class JoinStatus {
   }
 
   public void setDefaultAdvanceMode() {
-    rightSourceMode = RightSourceMode.INCOMING_BATCHES;
-    rightPosition = 0;
+    rightSourceMode = RightSourceMode.INCOMING;
   }
 
-  public void setRepeatedAdvanceMode() {
-    rightSourceMode = RightSourceMode.QUEUED_BATCHES;
+  public void setSV4AdvanceMode() {
+    rightSourceMode = RightSourceMode.SV4;
     svRightPosition = 0;
   }
 
@@ -127,6 +127,9 @@ public final class JoinStatus {
    * Side effect: advances to next right batch if current right batch size is exceeded
    */
   public final boolean isRightPositionAllowed(){
+    if (rightSourceMode == RightSourceMode.SV4)
+      return svRightPosition < sv4.getLength();
+
     if(!isRightPositionInCurrentBatch()){
       rightPosition = 0;
       lastRight = right.next();
@@ -167,6 +170,8 @@ public final class JoinStatus {
   }
 
   public JoinOutcome getOutcome(){
+    if (!ok)
+      return JoinOutcome.FAILURE;
     if (lastLeft == IterOutcome.OK && lastRight == IterOutcome.OK)
       return JoinOutcome.BATCH_RETURNED;
     if (eitherMatches(IterOutcome.OK_NEW_SCHEMA))
