@@ -39,6 +39,7 @@ When     : 'when';
 Or       : '||';
 And      : '&&';
 Equals   : '==';
+Equals2   : '=';
 NEquals  : '<>';
 NEquals2 : '!=';
 GTEquals : '>=';

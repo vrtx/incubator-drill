@@ -22,8 +22,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.common.expression.FieldReference;
 import org.apache.drill.common.logical.StorageEngineConfig;
-import org.apache.drill.exec.exception.SetupException;
 import org.apache.drill.exec.physical.OperatorCost;
 import org.apache.drill.exec.physical.base.AbstractBase;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
@@ -45,18 +45,19 @@ public class JSONSubScan extends AbstractBase implements SubScan {
   protected final List<JSONGroupScan.ScanEntry> readEntries;
   private final OperatorCost cost;
   private final Size size;
-  private final StorageEngineRegistry registry;
-  private final JSONStorageEngineConfig engineConfig;
   private final JSONStorageEngine storageEngine;
+  private final FieldReference ref;
 
   @JsonCreator
   public JSONSubScan(@JacksonInject StorageEngineRegistry registry,
                      @JsonProperty("engineConfig") StorageEngineConfig engineConfig,
-                     @JsonProperty("readEntries") List<JSONGroupScan.ScanEntry> readEntries) throws ExecutionSetupException {
+                     @JsonProperty("readEntries") List<JSONGroupScan.ScanEntry> readEntries, @JsonProperty("ref") FieldReference ref) throws ExecutionSetupException {
+    this(readEntries, (JSONStorageEngine) registry.getEngine(engineConfig), ref);
+  }
+  
+  JSONSubScan(List<JSONGroupScan.ScanEntry> readEntries, JSONStorageEngine engine, FieldReference ref){
     this.readEntries = readEntries;
-    this.registry = registry;
-    this.engineConfig = (JSONStorageEngineConfig) engineConfig;
-    this.storageEngine = (JSONStorageEngine) registry.getEngine(engineConfig);
+    this.storageEngine = engine;
     OperatorCost cost = new OperatorCost(0, 0, 0, 0);
     Size size = new Size(0, 0);
     for (JSONGroupScan.ScanEntry r : readEntries) {
@@ -65,6 +66,11 @@ public class JSONSubScan extends AbstractBase implements SubScan {
     }
     this.cost = cost;
     this.size = size;
+    this.ref = ref;
+  }
+  
+  public FieldReference getRef() {
+    return ref;
   }
 
   public List<JSONGroupScan.ScanEntry> getReadEntries() {
@@ -72,7 +78,7 @@ public class JSONSubScan extends AbstractBase implements SubScan {
   }
 
   public StorageEngineConfig getEngineConfig() {
-    return engineConfig;
+    return storageEngine.getConfig();
   }
 
   @JsonIgnore
@@ -82,7 +88,7 @@ public class JSONSubScan extends AbstractBase implements SubScan {
 
   @Override
   public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) throws ExecutionSetupException{
-    return new JSONSubScan(registry, (StorageEngineConfig) engineConfig, readEntries);
+    throw new UnsupportedOperationException();
   }
 
   @Override

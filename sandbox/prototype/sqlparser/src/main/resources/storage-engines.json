@@ -5,6 +5,11 @@
         "type":"parquet",
         "dfsName" : "file:///"
       },
+    "jsonl" :
+      {
+        "type":"json",
+        "dfsName" : "file:///"
+      },
     "parquet" :
       {
         "type":"parquet",

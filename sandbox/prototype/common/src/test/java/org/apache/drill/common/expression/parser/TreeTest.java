@@ -22,7 +22,7 @@ public class TreeTest {
 
     ExprLexer lexer = new ExprLexer(
         new ANTLRStringStream(
-            "if ($F1) then case when 1 then 2 else 4 end else if(4==3) then 1 else if(x==3) then 7 else (if(2==1) then 6 else 4 end) end"));
+            "if ($F1) then case when (_MAP.R_NAME = 'AFRICA') then 2 else 4 end else if(4==3) then 1 else if(x==3) then 7 else (if(2==1) then 6 else 4 end) end"));
     // ExprLexer lexer = new ExprLexer(new
     // ANTLRStringStream("if ('blue.red') then 'orange' else if (false) then 1 else 0 end"));
     // ExprLexer lexer = new ExprLexer(new ANTLRStringStream("2+2"));

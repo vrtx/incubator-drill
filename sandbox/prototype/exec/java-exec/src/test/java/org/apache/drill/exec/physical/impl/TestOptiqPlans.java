@@ -56,6 +56,11 @@ public class TestOptiqPlans {
   }
   
   @Test
+  public void stringFilter(@Injectable final BootStrapContext ctxt, @Injectable UserClientConnection connection, @Injectable ClusterCoordinator coord, @Injectable BitCom com, @Injectable DistributedCache cache) throws Throwable{
+    SimpleRootExec exec = doLogicalTest(ctxt, connection, "/logical_string_filter.json", coord, com, cache);
+  }
+  
+  @Test
   public void groupBy(@Injectable final BootStrapContext bitContext, @Injectable UserClientConnection connection, @Injectable ClusterCoordinator coord, @Injectable BitCom com, @Injectable DistributedCache cache) throws Throwable{
     SimpleRootExec exec = doLogicalTest(bitContext, connection, "/logical_group.json", coord, com, cache);
   }
@@ -127,6 +132,79 @@ public class TestOptiqPlans {
           for (int i = 0; i < vv.getAccessor().getValueCount(); i++) {
             Object o = vv.getAccessor().getObject(i);
             System.out.println(vv.getAccessor().getObject(i));
+          }
+        }
+      }
+      client.close();
+    }
+  }
+  
+  @Test
+  public void testFilterString() throws Exception {
+    RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
+    DrillConfig config = DrillConfig.create();
+
+    try(Drillbit bit1 = new Drillbit(config, serviceSet); DrillClient client = new DrillClient(config, serviceSet.getCoordinator());){
+      bit1.run();
+      client.connect();
+      List<QueryResultBatch> results = client.runQuery(UserProtos.QueryType.LOGICAL, Resources.toString(Resources.getResource("logical_string_filter.json"),Charsets.UTF_8));
+      RecordBatchLoader loader = new RecordBatchLoader(bit1.getContext().getAllocator());
+      for (QueryResultBatch b : results) {
+        System.out.println(String.format("Got %d results", b.getHeader().getRowCount()));
+        loader.load(b.getHeader().getDef(), b.getData());
+        for (VectorWrapper vw : loader) {
+          System.out.println(vw.getValueVector().getField().getName());
+          ValueVector vv = vw.getValueVector();
+          for (int i = 0; i < vv.getAccessor().getValueCount(); i++) {
+            Object o = vv.getAccessor().getObject(i);
+            if(vv instanceof VarBinaryVector){
+              VarBinaryVector.Accessor x = ((VarBinaryVector) vv).getAccessor();
+              VarBinaryHolder vbh = new VarBinaryHolder();
+              x.get(i, vbh);
+              System.out.printf("%d..%d", vbh.start, vbh.end);
+              
+              System.out.println("[" + new String( (byte[]) vv.getAccessor().getObject(i)) + "]");  
+            }else{
+              System.out.println(vv.getAccessor().getObject(i));
+            }
+            
+          }
+        }
+      }
+      client.close();
+    }
+  }
+  
+  
+  @Test
+  public void testLogicalJsonScan() throws Exception {
+    RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
+    DrillConfig config = DrillConfig.create();
+
+    try(Drillbit bit1 = new Drillbit(config, serviceSet); DrillClient client = new DrillClient(config, serviceSet.getCoordinator());){
+      bit1.run();
+      client.connect();
+      List<QueryResultBatch> results = client.runQuery(UserProtos.QueryType.LOGICAL, Resources.toString(Resources.getResource("logical_json_scan.json"),Charsets.UTF_8));
+      RecordBatchLoader loader = new RecordBatchLoader(bit1.getContext().getAllocator());
+      for (QueryResultBatch b : results) {
+        System.out.println(String.format("Got %d results", b.getHeader().getRowCount()));
+        loader.load(b.getHeader().getDef(), b.getData());
+        for (VectorWrapper vw : loader) {
+          System.out.println(vw.getValueVector().getField().getName());
+          ValueVector vv = vw.getValueVector();
+          for (int i = 0; i < vv.getAccessor().getValueCount(); i++) {
+            Object o = vv.getAccessor().getObject(i);
+            if(vv instanceof VarBinaryVector){
+              VarBinaryVector.Accessor x = ((VarBinaryVector) vv).getAccessor();
+              VarBinaryHolder vbh = new VarBinaryHolder();
+              x.get(i, vbh);
+              System.out.printf("%d..%d", vbh.start, vbh.end);
+              
+              System.out.println("[" + new String( (byte[]) vv.getAccessor().getObject(i)) + "]");  
+            }else{
+              System.out.println(vv.getAccessor().getObject(i));
+            }
+            
           }
         }
       }

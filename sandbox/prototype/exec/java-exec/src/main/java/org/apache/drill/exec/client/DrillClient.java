@@ -78,6 +78,9 @@ public class DrillClient implements Closeable{
     this.clusterCoordinator = coordinator;
   }
   
+  public DrillConfig getConfig(){
+    return config;
+  }
   
   /**
    * Connects the client to a Drillbit server

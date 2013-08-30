@@ -3,12 +3,11 @@ package org.apache.drill.sql.client.full;
 import java.util.List;
 
 import net.hydromatic.linq4j.Enumerator;
+import net.hydromatic.optiq.DataContext;
 
 import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.exec.client.DrillClient;
 import org.apache.drill.exec.proto.UserProtos;
-import org.apache.drill.exec.rpc.RpcException;
-import org.apache.drill.jdbc.DrillTable;
 
 public class DrillFullImpl<E>{
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(DrillFullImpl.class);
@@ -16,13 +15,15 @@ public class DrillFullImpl<E>{
   private final String plan;
   final DrillConfig config;
   private final List<String> fields;
+  private DataContext context;
 
   
-  public DrillFullImpl(String plan, DrillConfig config, List<String> fields) {
+  public DrillFullImpl(String plan, DrillConfig config, List<String> fields, DataContext context) {
     super();
     this.plan = plan;
     this.config = config;
     this.fields = fields;
+    this.context = context;
   }
 
   @SuppressWarnings("unchecked")
@@ -34,7 +35,7 @@ public class DrillFullImpl<E>{
     QueryRequestRunner runner = new QueryRequestRunner(plan, client, listener);
     runner.start();
     
-    return (Enumerator<E>) new ResultEnumerator(listener, client, fields);
+    return (Enumerator<E>) new ResultEnumerator(listener, client, fields, context);
     
   }
   

@@ -399,6 +399,7 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     }
 
     public void alloc(int recordCount){
+      recordCount *=10;
       out.allocateNew(recordCount);
       out.getMutator().setValueCount(recordCount);
     }
@@ -415,7 +416,8 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     }
 
     public void alloc(int recordCount){
-      out.allocateNew(in.getByteCapacity(), recordCount);
+      recordCount *= 10;
+      out.allocateNew(in.getByteCapacity()*10, recordCount);
       out.getMutator().setValueCount(recordCount);
     }
   }

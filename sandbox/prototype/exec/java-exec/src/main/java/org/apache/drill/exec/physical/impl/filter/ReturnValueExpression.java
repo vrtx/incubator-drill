@@ -22,6 +22,7 @@ public class ReturnValueExpression implements LogicalExpression{
   
   public ReturnValueExpression(LogicalExpression child, boolean returnTrueOnOne) {
     this.child = child;
+    this.returnTrueOnOne = returnTrueOnOne;
   }
 
   public LogicalExpression getChild() {
