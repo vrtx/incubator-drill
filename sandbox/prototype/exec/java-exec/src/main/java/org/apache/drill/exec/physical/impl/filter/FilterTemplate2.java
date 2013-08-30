@@ -9,14 +9,14 @@ import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.TransferPair;
 import org.apache.drill.exec.record.selection.SelectionVector2;
 
-public abstract class FilterTemplate implements Filterer{
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(FilterTemplate.class);
+public abstract class FilterTemplate2 implements Filterer{
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(FilterTemplate2.class);
   
   private SelectionVector2 outgoingSelectionVector;
   private SelectionVector2 incomingSelectionVector;
   private SelectionVectorMode svMode;
   private TransferPair[] transfers;
-  
+
   @Override
   public void setup(FragmentContext context, RecordBatch incoming, RecordBatch outgoing, TransferPair[] transfers) throws SchemaChangeException{
     this.transfers = transfers;
@@ -30,6 +30,7 @@ public abstract class FilterTemplate implements Filterer{
       this.incomingSelectionVector = incoming.getSelectionVector2();
       break;
     default:
+      // SV4 is handled in FilterTemplate4
       throw new UnsupportedOperationException();
     }
     doSetup(context, incoming, outgoing);
@@ -42,6 +43,7 @@ public abstract class FilterTemplate implements Filterer{
   }
   
   public void filterBatch(int recordCount){
+    outgoingSelectionVector.allocateNew(recordCount);
     switch(svMode){
     case NONE:
       filterBatchNoSV(recordCount);
@@ -67,7 +69,7 @@ public abstract class FilterTemplate implements Filterer{
     }
     outgoingSelectionVector.setRecordCount(svIndex);
   }
-  
+
   private void filterBatchNoSV(int recordCount){
     int svIndex = 0;
     for(char i =0; i < recordCount; i++){
