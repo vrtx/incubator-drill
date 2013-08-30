@@ -27,6 +27,7 @@ import org.apache.drill.exec.physical.impl.filter.ReturnValueExpression;
 import org.apache.drill.exec.physical.impl.join.JoinWorker.JoinOutcome;
 import org.apache.drill.exec.record.*;
 import org.apache.drill.exec.vector.*;
+import org.apache.drill.exec.vector.allocator.VectorAllocator;
 
 /**
  * A merge join combining to incoming in-order batches.
@@ -148,8 +149,8 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
         kill();
         return IterOutcome.STOP;
       case NO_MORE_DATA:
-        logger.debug("NO MORE DATA; returning {}", (status.getOutPosition() > 0 ? "OK" : "NONE"));
-        return status.getOutPosition() > 0 ? IterOutcome.OK: IterOutcome.NONE;
+        logger.debug("NO MORE DATA; returning {}", (status.getOutPosition() > 0 ? (first ? "OK_NEW_SCHEMA" : "OK") : "NONE"));
+        return status.getOutPosition() > 0 ? (first ? IterOutcome.OK_NEW_SCHEMA : IterOutcome.OK): IterOutcome.NONE;
       case SCHEMA_CHANGED:
         worker = null;
         if(status.getOutPosition() > 0){
@@ -327,8 +328,8 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
                                                       new TypedFieldId(vw.getField().getType(), vectorId));
       JVar vvOut = cg.declareVectorValueSetupAndMember("outgoing",
                                                        new TypedFieldId(vw.getField().getType(),vectorId));
-      // todo: check for room in vvOut
-      cg.getEvalBlock().add(vvOut.invoke("copyFrom")
+      // todo: check result of copyFromSafe and grow allocation
+      cg.getEvalBlock().add(vvOut.invoke("copyFromSafe")
                                    .arg(COPY_LEFT_MAPPING.getValueReadIndex())
                                    .arg(COPY_LEFT_MAPPING.getValueWriteIndex())
                                    .arg(vvIn));
@@ -346,7 +347,8 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
                                                       new TypedFieldId(vw.getField().getType(), vectorId - rightVectorBase));
       JVar vvOut = cg.declareVectorValueSetupAndMember("outgoing",
                                                        new TypedFieldId(vw.getField().getType(),vectorId));
-      cg.getEvalBlock().add(vvOut.invoke("copyFrom")
+      // todo: check result of copyFromSafe and grow allocation
+      cg.getEvalBlock().add(vvOut.invoke("copyFromSafe")
           .arg(COPY_RIGHT_MAPPING.getValueReadIndex())
           .arg(COPY_RIGHT_MAPPING.getValueWriteIndex())
           .arg(vvIn));
@@ -366,62 +368,18 @@ public class MergeJoinBatch extends AbstractRecordBatch<MergeJoinPOP> {
     // add fields from both batches
     for (VectorWrapper<?> w : left) {
       ValueVector outgoingVector = TypeHelper.getNewVector(w.getField(), context.getAllocator());
-      getAllocator(w.getValueVector(), outgoingVector).alloc(left.getRecordCount() * 4);
+      VectorAllocator.getAllocator(outgoingVector, (int) Math.ceil(w.getValueVector().getBufferSize() / left.getRecordCount())).alloc(left.getRecordCount() * 16);
       container.add(outgoingVector);
     }
 
     for (VectorWrapper<?> w : right) {
       ValueVector outgoingVector = TypeHelper.getNewVector(w.getField(), context.getAllocator());
-      getAllocator(w.getValueVector(), outgoingVector).alloc(right.getRecordCount() * 4);
+      VectorAllocator.getAllocator(outgoingVector, (int) Math.ceil(w.getValueVector().getBufferSize() / right.getRecordCount())).alloc(right.getRecordCount() * 16);
       container.add(outgoingVector);
     }
 
     container.buildSchema(BatchSchema.SelectionVectorMode.NONE);
     logger.debug("Built joined schema: {}", container.getSchema());
-  }
-
-  private VectorAllocator getAllocator(ValueVector in, ValueVector outgoing){
-    if(outgoing instanceof FixedWidthVector){
-      return new FixedVectorAllocator((FixedWidthVector) outgoing);
-    }else if(outgoing instanceof VariableWidthVector && in instanceof VariableWidthVector){
-      return new VariableVectorAllocator( (VariableWidthVector) in, (VariableWidthVector) outgoing);
-    }else{
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  private class FixedVectorAllocator implements VectorAllocator{
-    FixedWidthVector out;
-
-    public FixedVectorAllocator(FixedWidthVector out) {
-      super();
-      this.out = out;
-    }
-
-    public void alloc(int recordCount){
-      out.allocateNew(recordCount);
-      out.getMutator().setValueCount(recordCount);
-    }
-  }
-
-  private class VariableVectorAllocator implements VectorAllocator{
-    VariableWidthVector in;
-    VariableWidthVector out;
-
-    public VariableVectorAllocator(VariableWidthVector in, VariableWidthVector out) {
-      super();
-      this.in = in;
-      this.out = out;
-    }
-
-    public void alloc(int recordCount){
-      out.allocateNew(in.getByteCapacity(), recordCount);
-      out.getMutator().setValueCount(recordCount);
-    }
-  }
-
-  public interface VectorAllocator{
-    public void alloc(int recordCount);
   }
 
 }

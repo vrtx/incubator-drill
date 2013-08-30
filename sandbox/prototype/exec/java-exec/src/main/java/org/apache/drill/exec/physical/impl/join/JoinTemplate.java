@@ -119,13 +119,13 @@ public abstract class JoinTemplate implements JoinWorker {
           // If the left key has duplicates and we're about to cross a boundary in the right batch, add the
           // right table's record batch to the sv4 builder before calling next.  These records will need to be
           // copied again for each duplicate left key.
-          if (status.isLeftRepeating() && !status.isNextRightPositionInCurrentBatch()) {
+          if (status.isLeftRepeating() && !status.isRightPositionInCurrentBatch()) {
             status.outputBatch.addRightToBatchBuilder();
             crossedBatchBoundaries = true;
           }
           status.advanceRight();
 
-        } while (status.isRightPositionAllowed() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
+        } while (status.isRightPositionInCurrentBatch() && doCompare(status.getLeftPosition(), status.getRightPosition()) == 0);
 
         if (status.getRightPosition() > initialRightPosition && status.isLeftRepeating())
           // more than one matching result from right table; reset position in case of subsequent left match
