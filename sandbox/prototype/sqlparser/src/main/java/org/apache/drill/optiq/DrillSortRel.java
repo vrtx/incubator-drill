@@ -78,9 +78,9 @@ public class DrillSortRel extends SortRel implements DrillRel {
   private static String toDrill(RelFieldCollation collation) {
     switch (collation.getDirection()) {
     case Ascending:
-      return "asc";
+      return "ASC";
     case Descending:
-      return "desc";
+      return "DESC";
     default:
       throw new AssertionError(collation.getDirection());
     }

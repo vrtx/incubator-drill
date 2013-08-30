@@ -10,6 +10,8 @@ if [ ! -f .classpath ]; then
     (cd contrib/sqlline; mvn dependency:build-classpath -Dmdep.outputFile=../../.classpath)
 fi
 
-exec java -Dlogback.configurationFile=/src/drill/sandbox/prototype/sqlparser/src/test/resources/logback.xml -cp "$(cat .classpath)" sqlline.SqlLine "$@"
+#exec java -Drebel.log=true -javaagent:/src/jrebel/jrebel.jar -Dlogback.configurationFile=/src/drill/sandbox/prototype/sqlparser/src/test/resources/logback.xml -cp ./:"$(cat .classpath)" sqlline.SqlLine "$@"
+exec java -Dlogback.configurationFile=/src/drill/sandbox/prototype/sqlparser/src/test/resources/logback.xml -cp ./:"$(cat .classpath)" sqlline.SqlLine "$@"
+
 
 # End sqlline

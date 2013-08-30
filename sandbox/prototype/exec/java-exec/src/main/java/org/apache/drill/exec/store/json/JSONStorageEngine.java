@@ -19,6 +19,7 @@ package org.apache.drill.exec.store.json;
 
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.store.AbstractStorageEngine;
+import org.apache.drill.exec.store.SchemaProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 
@@ -45,4 +46,11 @@ public class JSONStorageEngine extends AbstractStorageEngine {
   public FileSystem getFileSystem() {
     return fileSystem;
   }
+
+  @Override
+  public SchemaProvider getSchemaProvider() {
+    throw new UnsupportedOperationException();
+  }
+  
+  
 }

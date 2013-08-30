@@ -81,12 +81,13 @@ public class BatchLoaderMap implements Map<String, Object> {
   }
 
   public Object getCurrentAsObjectArray() {
-    
     for (int i = 0; i < requestedFields.size(); i++) {
-      ValueVector vv = fields.get(requestedFields.get(i).toLowerCase());
+      ValueVector vv = fields.get(requestedFields.get(i));
       if (vv == null) {
+        logger.debug("Failure while retrieving field of {}.  Didn't exist in returned set of {}", requestedFields.get(i), fields.keySet());
         objArr[i] = null;
       } else {
+//        logger.debug("Found field, returned value from vector {}", vv);
         objArr[i] = vv.getAccessor().getObject(index);
       }
     }

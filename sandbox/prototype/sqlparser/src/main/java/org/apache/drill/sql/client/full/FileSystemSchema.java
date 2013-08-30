@@ -74,14 +74,14 @@ public class FileSystemSchema implements Schema{
   }
 
   @Override
-  public QueryProvider getQueryProvider() {
+  public QueryProvider getQueryProvider() {    
     return queryProvider;
   }
 
 
   @Override
   public Collection<TableFunctionInSchema> getTableFunctions(String name) {
-    return Collections.EMPTY_LIST;
+    return Collections.emptyList();
   }
   
   @Override

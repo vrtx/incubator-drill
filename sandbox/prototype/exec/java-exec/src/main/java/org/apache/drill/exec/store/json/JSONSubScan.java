@@ -18,16 +18,26 @@
 
 package org.apache.drill.exec.store.json;
 
-import com.fasterxml.jackson.annotation.*;
-import com.google.common.collect.Iterators;
+import java.util.Iterator;
+import java.util.List;
+
+import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.logical.StorageEngineConfig;
 import org.apache.drill.exec.exception.SetupException;
 import org.apache.drill.exec.physical.OperatorCost;
-import org.apache.drill.exec.physical.base.*;
+import org.apache.drill.exec.physical.base.AbstractBase;
+import org.apache.drill.exec.physical.base.PhysicalOperator;
+import org.apache.drill.exec.physical.base.PhysicalVisitor;
+import org.apache.drill.exec.physical.base.Size;
+import org.apache.drill.exec.physical.base.SubScan;
 import org.apache.drill.exec.store.StorageEngineRegistry;
 
-import java.util.Iterator;
-import java.util.List;
+import com.fasterxml.jackson.annotation.JacksonInject;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.google.common.collect.Iterators;
 
 @JsonTypeName("json-sub-scan")
 public class JSONSubScan extends AbstractBase implements SubScan {
@@ -42,7 +52,7 @@ public class JSONSubScan extends AbstractBase implements SubScan {
   @JsonCreator
   public JSONSubScan(@JacksonInject StorageEngineRegistry registry,
                      @JsonProperty("engineConfig") StorageEngineConfig engineConfig,
-                     @JsonProperty("readEntries") List<JSONGroupScan.ScanEntry> readEntries) throws SetupException {
+                     @JsonProperty("readEntries") List<JSONGroupScan.ScanEntry> readEntries) throws ExecutionSetupException {
     this.readEntries = readEntries;
     this.registry = registry;
     this.engineConfig = (JSONStorageEngineConfig) engineConfig;
@@ -71,13 +81,8 @@ public class JSONSubScan extends AbstractBase implements SubScan {
   }
 
   @Override
-  public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) {
-    try {
-      return new JSONSubScan(registry, (StorageEngineConfig) engineConfig, readEntries);
-    } catch (SetupException e) {
-      e.printStackTrace();
-    }
-    return null;
+  public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) throws ExecutionSetupException{
+    return new JSONSubScan(registry, (StorageEngineConfig) engineConfig, readEntries);
   }
 
   @Override
