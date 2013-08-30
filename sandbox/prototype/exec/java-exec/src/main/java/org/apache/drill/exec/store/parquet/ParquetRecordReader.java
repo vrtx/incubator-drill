@@ -125,7 +125,7 @@ public class ParquetRecordReader implements RecordReader {
     // loop to add up the length of the fixed width columns and build the schema
     for (int i = 0; i < columns.size(); ++i) {
       column = columns.get(i);
-
+      logger.debug("Found Parquet column {} of type {}", column.getPath(), column.getType());
       // sum the lengths of all of the fixed length fields
       if (column.getType() != PrimitiveType.PrimitiveTypeName.BINARY) {
         // There is not support for the fixed binary type yet in parquet, leaving a task here as a reminder

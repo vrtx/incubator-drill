@@ -14,8 +14,13 @@ public class ReturnValueExpression implements LogicalExpression{
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ReturnValueExpression.class);
 
   private LogicalExpression child;
+  private boolean returnTrueOnOne;
   
   public ReturnValueExpression(LogicalExpression child) {
+    this(child, true);
+  }
+  
+  public ReturnValueExpression(LogicalExpression child, boolean returnTrueOnOne) {
     this.child = child;
   }
 
@@ -41,6 +46,10 @@ public class ReturnValueExpression implements LogicalExpression{
   @Override
   public Iterator<LogicalExpression> iterator() {
     return Iterators.singletonIterator(child);
+  }
+
+  public boolean isReturnTrueOnOne() {
+    return returnTrueOnOne;
   }
 
   

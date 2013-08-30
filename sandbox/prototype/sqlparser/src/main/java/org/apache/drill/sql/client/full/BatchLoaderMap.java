@@ -15,6 +15,7 @@ import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.rpc.RpcException;
 import org.apache.drill.exec.rpc.user.QueryResultBatch;
 import org.apache.drill.exec.vector.ValueVector;
+import org.apache.drill.exec.vector.VarBinaryVector;
 
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -88,7 +89,12 @@ public class BatchLoaderMap implements Map<String, Object> {
         objArr[i] = null;
       } else {
 //        logger.debug("Found field, returned value from vector {}", vv);
-        objArr[i] = vv.getAccessor().getObject(index);
+        if(vv instanceof VarBinaryVector){
+          objArr[i] = new String( (byte[]) ((VarBinaryVector)vv).getAccessor().getObject(index));
+        }else{
+          objArr[i] = vv.getAccessor().getObject(index);  
+        }
+        
       }
     }
     return objArr;

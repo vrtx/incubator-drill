@@ -239,7 +239,12 @@ public class EvaluationVisitor {
       LogicalExpression child = e.getChild();
       // Preconditions.checkArgument(child.getMajorType().equals(Types.REQUIRED_BOOLEAN));
       HoldingContainer hc = child.accept(this, generator);
-      generator.getEvalBlock()._return(hc.getValue().eq(JExpr.lit(1)));
+      if(e.isReturnTrueOnOne()){
+        generator.getEvalBlock()._return(hc.getValue().eq(JExpr.lit(1)));  
+      }else{
+        generator.getEvalBlock()._return(hc.getValue());
+      }
+      
       return null;
     }
 

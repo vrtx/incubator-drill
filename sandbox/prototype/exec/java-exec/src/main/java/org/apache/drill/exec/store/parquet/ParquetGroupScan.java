@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.FieldReference;
-import org.apache.drill.exec.exception.SetupException;
+import org.apache.drill.common.logical.StorageEngineConfig;
 import org.apache.drill.exec.physical.EndpointAffinity;
 import org.apache.drill.exec.physical.OperatorCost;
 import org.apache.drill.exec.physical.ReadEntryFromHDFS;
@@ -360,6 +360,11 @@ public class ParquetGroupScan extends AbstractGroupScan {
     return new Size(10,10);
   }
 
+  @JsonProperty("storageengine")
+  public StorageEngineConfig getStorageEngineConfig(){
+    return this.engineConfig;
+  }
+  
   @Override
   @JsonIgnore
   public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) {

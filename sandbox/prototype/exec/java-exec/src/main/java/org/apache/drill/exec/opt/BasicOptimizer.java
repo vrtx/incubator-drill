@@ -17,6 +17,8 @@ import org.apache.drill.common.logical.LogicalPlan;
 import org.apache.drill.common.logical.StorageEngineConfig;
 import org.apache.drill.common.logical.data.CollapsingAggregate;
 import org.apache.drill.common.logical.data.Filter;
+import org.apache.drill.common.logical.data.Join;
+import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.common.logical.data.NamedExpression;
 import org.apache.drill.common.logical.data.Order;
 import org.apache.drill.common.logical.data.Order.Direction;
@@ -34,6 +36,7 @@ import org.apache.drill.exec.exception.OptimizerException;
 import org.apache.drill.exec.ops.QueryContext;
 import org.apache.drill.exec.physical.PhysicalPlan;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
+import org.apache.drill.exec.physical.config.MergeJoinPOP;
 import org.apache.drill.exec.physical.config.Screen;
 import org.apache.drill.exec.physical.config.SelectionVectorRemover;
 import org.apache.drill.exec.physical.config.Sort;
@@ -144,12 +147,35 @@ public class BasicOptimizer extends Optimizer{
         keys.add(new NamedExpression(e, new FieldReference((SchemaPath) e)));
         orderDefs.add(new OrderDef(Direction.ASC, e));
       }
-      
       Sort sort = new Sort(segment.getInput().accept(this, value), orderDefs, false);
       
       StreamingAggregate sa = new StreamingAggregate(sort, keys.toArray(new NamedExpression[keys.size()]), agg.getAggregations(), 1.0f);
       SelectionVectorRemover svm = new SelectionVectorRemover(sa);
       return svm;
+    }
+
+
+
+    @Override
+    public PhysicalOperator visitJoin(Join join, Object value) throws OptimizerException {
+      PhysicalOperator leftOp = join.getLeft().accept(this, value);
+      List<OrderDef> leftOrderDefs = Lists.newArrayList();
+      for(JoinCondition jc : join.getConditions()){
+        leftOrderDefs.add(new OrderDef(Direction.ASC, jc.getLeft()));
+      }
+      leftOp = new Sort(leftOp, leftOrderDefs, false);
+      leftOp = new SelectionVectorRemover(leftOp);
+      
+      PhysicalOperator rightOp = join.getRight().accept(this, value);
+      List<OrderDef> rightOrderDefs = Lists.newArrayList();
+      for(JoinCondition jc : join.getConditions()){
+        rightOrderDefs.add(new OrderDef(Direction.ASC, jc.getRight()));
+      }
+      rightOp = new Sort(rightOp, rightOrderDefs, false);
+      rightOp = new SelectionVectorRemover(rightOp);
+      
+      MergeJoinPOP mjp = new MergeJoinPOP(leftOp, rightOp, Arrays.asList(join.getConditions()));
+      return new SelectionVectorRemover(mjp);
     }
 
 
