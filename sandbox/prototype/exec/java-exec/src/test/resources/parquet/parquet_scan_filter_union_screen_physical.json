@@ -14,10 +14,10 @@
         path : "/tmp/tpc-h/supplier"
     }
     ],
-    storageengine:{
-                         "type":"parquet",
-                         "dfsName" : "file:///"
-                   }
+    storageengine: {
+      "type":"parquet",
+      "dfsName" : "file:///"
+    }
   },
   {
     @id : 2,

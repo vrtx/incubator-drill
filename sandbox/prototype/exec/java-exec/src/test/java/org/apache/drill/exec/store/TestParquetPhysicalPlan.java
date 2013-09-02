@@ -53,7 +53,6 @@ public class TestParquetPhysicalPlan {
 
 
   @Test
-  @Ignore
   public void testParseParquetPhysicalPlan() throws Exception {
     RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
     DrillConfig config = DrillConfig.create();
