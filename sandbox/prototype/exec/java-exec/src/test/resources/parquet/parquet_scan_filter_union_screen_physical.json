@@ -1,0 +1,43 @@
+{
+  head : {
+    type : "APACHE_DRILL_PHYSICAL",
+    version : 1,
+    generator : {
+      type : "manual"
+    }
+  },
+  graph : [ {
+    pop : "parquet-scan",
+    @id : 1,
+    entries : [
+    {
+        path : "/tmp/tpc-h/supplier"
+    }
+    ],
+    storageengine:{
+                         "type":"parquet",
+                         "dfsName" : "file:///"
+                   }
+  },
+  {
+    @id : 2,
+    child : 1,
+    pop : "filter",
+    expr : "S_SUPPKEY < 100"
+  },
+  {
+    @id : 3,
+    child : 2,
+    pop : "selection-vector-remover"
+  },
+  {
+     "@id": 4,
+     "child": 3,
+     "pop": "union-exchange"
+  },
+  {
+    pop : "screen",
+    @id : 5,
+    child : 4
+  } ]
+}

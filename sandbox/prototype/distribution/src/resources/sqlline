@@ -25,6 +25,6 @@ fi
 CP=$DRILL_HOME/jars/*:$CP
 CP=$DRILL_HOME/lib/*:$CP
 
-CP=$CP:$DRILL_CONF_DIR
+CP=$DRILL_CONF_DIR:$CP
 
-exec $DRILL_JAVA_OPTS -cp $CP sqlline.SqlLine "$@"
+exec $JAVA $DRILL_JAVA_OPTS -cp $CP sqlline.SqlLine "$@"

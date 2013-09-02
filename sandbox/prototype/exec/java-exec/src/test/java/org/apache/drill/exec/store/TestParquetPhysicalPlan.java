@@ -47,7 +47,8 @@ public class TestParquetPhysicalPlan {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestParquetPhysicalPlan.class);
 
   //public String fileName = "/physical_test2.json";
-  public String fileName = "parquet/parquet_scan_union_screen_physical.json";
+  public String fileName = "parquet/parquet_scan_filter_union_screen_physical.json";
+//  public String fileName = "parquet/parquet_scan_union_screen_physical.json";
 //  public String fileName = "parquet-sample.json";
 
 

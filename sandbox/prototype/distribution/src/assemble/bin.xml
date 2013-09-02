@@ -34,10 +34,16 @@
       <excludes>
         <exclude>org.apache.drill</exclude>
         <exclude>org.apache.drill.exec</exclude>
-        <exclude>com.google.protobuf</exclude>
-        <exclude>de.huxhorn.*</exclude>
       </excludes>
       <scope>test</scope>
+    </dependencySet>
+    <dependencySet>
+      <outputDirectory>contrib</outputDirectory>
+      <includes>
+        <include>sqlline</include>
+      </includes>
+      <unpack>false</unpack>
+      <useProjectArtifact>true</useProjectArtifact>
     </dependencySet>
   </dependencySets>
   <files>

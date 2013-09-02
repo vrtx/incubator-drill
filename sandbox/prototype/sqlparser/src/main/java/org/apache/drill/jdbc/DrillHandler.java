@@ -24,6 +24,7 @@ import org.apache.drill.exec.server.Drillbit;
 import org.apache.drill.exec.server.RemoteServiceSet;
 import org.apache.drill.exec.store.SchemaProvider;
 import org.apache.drill.exec.store.SchemaProviderRegistry;
+import org.apache.drill.exec.store.parquet.ParquetStorageEngineConfig;
 import org.apache.drill.sql.client.full.FileSystemSchema;
 
 import com.google.common.base.Charsets;
@@ -31,6 +32,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.io.Resources;
 
 public class DrillHandler extends HandlerImpl {
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(DrillHandler.class);
 
   private ClusterCoordinator coordinator;
   private volatile DrillClient client;
