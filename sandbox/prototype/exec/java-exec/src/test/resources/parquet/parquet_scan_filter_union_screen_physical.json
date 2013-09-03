@@ -23,7 +23,7 @@
     @id : 2,
     child : 1,
     pop : "filter",
-    expr : "S_SUPPKEY < 100"
+    expr : "S_SUPPKEY < 10"
   },
   {
     @id : 3,

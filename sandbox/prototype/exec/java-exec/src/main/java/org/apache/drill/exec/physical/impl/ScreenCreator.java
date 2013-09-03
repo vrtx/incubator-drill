@@ -117,6 +117,9 @@ public class ScreenCreator implements RootCreator<Screen>{
       case OK:
         context.batchesCompleted.inc(1);
         context.recordsCompleted.inc(incoming.getRecordCount());
+        // don't send an empty batch
+        if (incoming.getRecordCount() == 0)
+          return true;
         QueryWritableBatch batch = materializer.convertNext(false);
         connection.sendResult(listener, batch);
         return true;

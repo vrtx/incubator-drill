@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.junit.AfterClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -69,17 +70,18 @@ public class TestParquetPhysicalPlan {
         loader.load(b.getHeader().getDef(), b.getData());
         for (VectorWrapper vw : loader) {
 //          System.out.println(vw.getValueVector().getField().getName() + vw.getValueVector().getField().getType());
-          System.out.println(vw.getValueVector().getField().getName());
+          System.out.print(vw.getValueVector().getField().getName() + ": ");
           ValueVector vv = vw.getValueVector();
           for (int i = 0; i < vv.getAccessor().getValueCount(); i++) {
             Object o = vv.getAccessor().getObject(i);
             if (o instanceof byte[]) {
-              System.out.println(new String((byte[]) o));
+              System.out.print(" [" + new String((byte[]) o) + "]");
             } else {
-              System.out.println(vv.getAccessor().getObject(i));
+              System.out.print(" [" + vv.getAccessor().getObject(i) + "]");
             }
-            break;
+//            break;
           }
+          System.out.println();
         }
       }
       client.close();
@@ -125,4 +127,11 @@ public class TestParquetPhysicalPlan {
       client.close();
     }
   }
+
+  @AfterClass
+  public static void tearDown() throws Exception{
+    // pause to get logger to catch up.
+    Thread.sleep(1000);
+  }
+
 }

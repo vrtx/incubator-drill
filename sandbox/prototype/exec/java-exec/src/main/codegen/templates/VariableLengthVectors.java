@@ -300,6 +300,9 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
     
     public void setValueCount(int valueCount) {
       ${minor.class}Vector.this.valueCount = valueCount;
+//      System.out.println("VarBin.setValueCount(): count: " + valueCount +
+//                         ", new writer index: " + offsetVector.getAccessor().get(valueCount) +
+//                         ", old writer index: " + data.writerIndex());
       data.writerIndex(offsetVector.getAccessor().get(valueCount));
       offsetVector.getMutator().setValueCount(valueCount+1);
     }

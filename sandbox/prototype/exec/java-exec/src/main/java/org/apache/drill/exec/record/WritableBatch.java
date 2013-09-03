@@ -72,6 +72,12 @@ public class WritableBatch {
     List<FieldMetadata> metadata = Lists.newArrayList();
 
     for (ValueVector vv : vectors) {
+      // todo: having a record count of 0 can be problematic.  For example, OK_NEW_SCHEMA with 0 records
+      //       followed by OK w/ one or more records may cause certain operators to fail since the metadata
+      //       is available but the source vectors are dead.  Dropping the batch entirely would cause
+      //       upstream operators to miss a schema change notification.  One possible option is to not send
+      //       any metadata if there are no records:
+      //  if (vv.getAccessor().getValueCount() == 0) continue;
       metadata.add(vv.getMetadata());
       
       // don't try to get the buffers if we don't have any records.  It is possible the buffers are dead buffers.
