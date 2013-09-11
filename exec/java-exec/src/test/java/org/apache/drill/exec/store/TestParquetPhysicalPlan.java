@@ -43,10 +43,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TestParquetPhysicalPlan {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestParquetPhysicalPlan.class);
 
-  public String fileName = "parquet/parquet_scan_filter_union_screen_physical.json";
+  public String fileName = "parquet/cust-hash.json";
 
   @Test
-  @Ignore
   public void testParseParquetPhysicalPlan() throws Exception {
     RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
     DrillConfig config = DrillConfig.create();
