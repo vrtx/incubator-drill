@@ -103,6 +103,7 @@ Similarly, the Drill shell can be used to query a JSON file directly:
     jdbc:drill:schema=json> SELECT _MAP['name'], _MAP['age']
                              FROM  "users.json";
 
+To exit sqlline, press ctrl+d.
 
 .. _Accessing Drill:
 
