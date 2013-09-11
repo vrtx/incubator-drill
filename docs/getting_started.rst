@@ -41,7 +41,7 @@ To start a single DrillBit daemon, simply execute the following command:
 
     $ ./bin/drillbit.sh start
 
-The damon script can be configured using the following environment variables:
+The daemon script can be configured using the following environment variables:
 
 ::
 
@@ -80,7 +80,7 @@ all supported drivers.
     **NOTE:** For now, the top-level field in Drill is a MAP (e.g. JSON Object, column
     family, etc.).  Thus, field names will generally need to be wrapped in ``_MAP[' ']``.
 
-The following example illustrates a querying one of the sample datasets in parquet format:
+The following example illustrates querying one of the sample datasets in parquet format:
 
 ::
 
