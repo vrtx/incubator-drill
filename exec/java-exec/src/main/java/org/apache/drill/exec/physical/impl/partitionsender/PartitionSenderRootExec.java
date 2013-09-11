@@ -69,13 +69,6 @@ class PartitionSenderRootExec implements RootExec {
                                                     context.getCommunicator().getTunnel(endpoint),
                                                     incoming,
                                                     context);
-    try {
-      createPartitioner();
-    } catch (SchemaChangeException e) {
-      ok = false;
-      logger.error("Failed to create partitioning sender during query ", e);
-      context.fail(e);
-    }
   }
 
   @Override
@@ -107,7 +100,9 @@ class PartitionSenderRootExec implements RootExec {
       case OK_NEW_SCHEMA:
         try {
           // send all existing batches
-          flushOutgoingBatches(false, true);
+          if (partitioner != null) {
+            flushOutgoingBatches(false, true);
+          }
           // update OutgoingRecordBatch's schema and generate partitioning code
           createPartitioner();
         } catch (SchemaChangeException e) {
