@@ -103,6 +103,9 @@ class PartitionSenderRootExec implements RootExec {
           if (partitioner != null) {
             flushOutgoingBatches(false, true);
           }
+          for (OutgoingRecordBatch b : outgoing) {
+            b.initializeBatch();
+          }
           // update OutgoingRecordBatch's schema and generate partitioning code
           createPartitioner();
         } catch (SchemaChangeException e) {
@@ -198,7 +201,7 @@ class PartitionSenderRootExec implements RootExec {
     for (OutgoingRecordBatch batch : outgoing) {
 
       JArray outgoingVectorInitBatch = JExpr.newArray(cg.getModel().ref(ValueVector.class));
-      for (VectorWrapper<?> vv : batch) {
+      for (VectorWrapper<?> vv : incoming) {
         // declare outgoing value vector and assign it to the array
         JVar outVV = cg.declareVectorValueSetupAndMember("outgoing[" + batchId + "]",
                                                          new TypedFieldId(vv.getField().getType(),
@@ -268,8 +271,8 @@ class PartitionSenderRootExec implements RootExec {
    * @param schemaChanged  true if the schema has changed
    */
   public void flushOutgoingBatches(boolean isLastBatch, boolean schemaChanged) throws SchemaChangeException {
+    logger.debug("Attempting to flush all outgoing batches");
     for (OutgoingRecordBatch batch : outgoing) {
-      logger.debug("Attempting to flush all outgoing batches");
       if (isLastBatch)
         batch.setIsLast();
       batch.flush();
