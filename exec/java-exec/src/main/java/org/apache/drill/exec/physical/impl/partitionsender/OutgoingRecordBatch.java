@@ -39,6 +39,7 @@ import org.apache.drill.exec.record.selection.SelectionVector4;
 import org.apache.drill.exec.rpc.BaseRpcOutcomeListener;
 import org.apache.drill.exec.rpc.RpcException;
 import org.apache.drill.exec.rpc.bit.BitTunnel;
+import org.apache.drill.exec.util.BatchPrinter;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.allocator.VectorAllocator;
 import org.apache.drill.exec.work.foreman.ErrorHelper;
@@ -63,12 +64,14 @@ public class OutgoingRecordBatch implements RecordBatch {
   private VectorContainer vectorContainer;
   private int recordCount;
   private int recordCapacity;
+  private int oppositeMinorFragmentId;
 
-  public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context) {
+  public OutgoingRecordBatch(HashPartitionSender operator, BitTunnel tunnel, RecordBatch incoming, FragmentContext context, int oppositeMinorFragmentId) {
     this.incoming = incoming;
     this.context = context;
     this.operator = operator;
     this.tunnel = tunnel;
+    this.oppositeMinorFragmentId = oppositeMinorFragmentId;
     initializeBatch();
   }
 
@@ -101,13 +104,15 @@ public class OutgoingRecordBatch implements RecordBatch {
       for(VectorWrapper<?> w : vectorContainer){
         w.getValueVector().getMutator().setValueCount(recordCount);
       }
-      
+
+//      BatchPrinter.printBatch(vectorContainer);
+
       FragmentWritableBatch writableBatch = new FragmentWritableBatch(isLast,
                                                                       handle.getQueryId(),
                                                                       handle.getMajorFragmentId(),
                                                                       handle.getMinorFragmentId(),
                                                                       operator.getOppositeMajorFragmentId(),
-                                                                      0,
+                                                                      oppositeMinorFragmentId,
                                                                       getWritableBatch());
 
       tunnel.sendRecordBatch(statusHandler, context, writableBatch);
@@ -123,7 +128,7 @@ public class OutgoingRecordBatch implements RecordBatch {
                                                                         handle.getMajorFragmentId(),
                                                                         handle.getMinorFragmentId(),
                                                                         operator.getOppositeMajorFragmentId(),
-                                                                        0,
+                                                                        oppositeMinorFragmentId,
                                                                         getWritableBatch());
         tunnel.sendRecordBatch(statusHandler, context, writableBatch);
         return true;
@@ -222,7 +227,7 @@ public class OutgoingRecordBatch implements RecordBatch {
 
   @Override
   public TypedFieldId getValueVectorId(SchemaPath path) {
-    return vectorContainer.getValueVector(path);
+    return vectorContainer.getValueVectorId(path);
   }
 
   @Override
