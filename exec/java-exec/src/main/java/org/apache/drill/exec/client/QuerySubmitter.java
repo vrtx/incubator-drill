@@ -151,6 +151,7 @@ public class QuerySubmitter {
     @Override
     public void resultArrived(QueryResultBatch result) {
       int rows = result.getHeader().getRowCount();
+      count.addAndGet(rows);
       if (result.getData() != null) {
         count.addAndGet(rows);
         try {
