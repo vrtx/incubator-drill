@@ -114,10 +114,7 @@ public class OutgoingRecordBatch implements RecordBatch {
     } else {
       logger.debug("Flush requested on an empty outgoing record batch" + (isLast ? " (last batch)" : ""));
       if (isLast) {
-        // if the last batch is empty, it must not contain any value vectors.
-        vectorContainer = new VectorContainer();
-
-        // send final batch
+        // send final (empty) batch
         FragmentWritableBatch writableBatch = new FragmentWritableBatch(isLast,
                                                                         handle.getQueryId(),
                                                                         handle.getMajorFragmentId(),
@@ -126,6 +123,7 @@ public class OutgoingRecordBatch implements RecordBatch {
                                                                         0,
                                                                         getWritableBatch());
         tunnel.sendRecordBatch(statusHandler, context, writableBatch);
+        vectorContainer.clear();
         return true;
       }
     }

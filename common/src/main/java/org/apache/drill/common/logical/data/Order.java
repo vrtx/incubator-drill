@@ -105,7 +105,7 @@ public class Order extends SingleInputOperator {
   }
 
   public static enum Direction {
-    ASC("asc"), DESC("desc");
+    ASC("ASC"), DESC("DESC");
     public final String description;
 
     Direction(String d) {
