@@ -18,13 +18,13 @@
 package org.apache.drill.exec.physical.impl.sort;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
+import com.beust.jcommander.internal.Lists;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.drill.common.defs.OrderDef;
-import org.apache.drill.common.expression.ErrorCollector;
-import org.apache.drill.common.expression.ErrorCollectorImpl;
-import org.apache.drill.common.expression.ExpressionPosition;
-import org.apache.drill.common.expression.FunctionCall;
-import org.apache.drill.common.expression.LogicalExpression;
+import org.apache.drill.common.expression.*;
 import org.apache.drill.common.logical.data.Order.Direction;
 import org.apache.drill.exec.compile.sig.MappingSet;
 import org.apache.drill.exec.exception.ClassTransformationException;
@@ -36,10 +36,7 @@ import org.apache.drill.exec.expr.HoldingContainerExpression;
 import org.apache.drill.exec.expr.fn.impl.ComparatorFunctions;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.Sort;
-import org.apache.drill.exec.record.AbstractRecordBatch;
-import org.apache.drill.exec.record.BatchSchema;
-import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.record.WritableBatch;
+import org.apache.drill.exec.record.*;
 import org.apache.drill.exec.record.selection.SelectionVector2;
 import org.apache.drill.exec.record.selection.SelectionVector4;
 
@@ -49,7 +46,7 @@ import com.sun.codemodel.JExpr;
 
 public class SortBatch extends AbstractRecordBatch<Sort> {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(SortBatch.class);
-
+  static int f = 0;
   public static final MappingSet MAIN_MAPPING = new MappingSet( (String) null, null, CodeGenerator.DEFAULT_SCALAR_MAP, CodeGenerator.DEFAULT_SCALAR_MAP);
   public static final MappingSet LEFT_MAPPING = new MappingSet("leftIndex", null, CodeGenerator.DEFAULT_SCALAR_MAP, CodeGenerator.DEFAULT_SCALAR_MAP);
   public static final MappingSet RIGHT_MAPPING = new MappingSet("rightIndex", null, CodeGenerator.DEFAULT_SCALAR_MAP, CodeGenerator.DEFAULT_SCALAR_MAP);
@@ -126,6 +123,23 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
           }
           // fall through.
         case OK:
+          //System.out.println("Adding batch to sorter with schema " + incoming.getSchema());
+          for (VectorWrapper w : incoming) {
+            // for each column
+            Map<Long, Boolean> values = new HashedMap();
+            if (w.getField().matches(new SchemaPath("NATIONKEY", ExpressionPosition.UNKNOWN))) {
+              for (int i = 0; i < incoming.getRecordCount(); i++) {
+                if (values.get((Long)w.getValueVector().getAccessor().getObject(i)) == null) {
+                  values.put((Long)w.getValueVector().getAccessor().getObject(i), Boolean.TRUE);
+                }
+                //System.out.print(" [" + w.getValueVector().getAccessor().getObject(i) + "]");
+                //if (i % 10 == 0) System.out.println();
+              }
+              
+              System.out.println(f++ + ": Total unique values in this fragment batch: " + values.size());
+            }
+          }
+
           if(!builder.add(incoming)){
             throw new UnsupportedOperationException("Sort doesn't currently support doing an external sort.");
           };

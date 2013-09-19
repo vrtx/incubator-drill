@@ -43,21 +43,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TestParquetPhysicalPlan {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestParquetPhysicalPlan.class);
 
-  public String fileName = "parquet/cust-hash.json";
+  public String fileName = "parquet/cust-hash-union.json";
 
   @Test
   public void testParseParquetPhysicalPlan() throws Exception {
     RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
     DrillConfig config = DrillConfig.create();
 
-    try(Drillbit bit1 = new Drillbit(config, serviceSet); DrillClient client = new DrillClient(config, serviceSet.getCoordinator());){
+    try(Drillbit bit1 = new Drillbit(config, serviceSet);
+        Drillbit bit2 = new Drillbit(config, serviceSet);
+        Drillbit bit3 = new Drillbit(config, serviceSet);
+        Drillbit bit4 = new Drillbit(config, serviceSet);
+        Drillbit bit5 = new Drillbit(config, serviceSet);
+        Drillbit bit6 = new Drillbit(config, serviceSet);
+        Drillbit bit7 = new Drillbit(config, serviceSet);
+        Drillbit bit8 = new Drillbit(config, serviceSet);
+        DrillClient client = new DrillClient(config, serviceSet.getCoordinator());) {
       bit1.run();
+      bit2.run();
+      bit3.run();
+      bit4.run();
+      bit5.run();
+      bit6.run();
+      bit7.run();
+      bit8.run();
       client.connect();
       List<QueryResultBatch> results = client.runQuery(UserProtos.QueryType.PHYSICAL, Resources.toString(Resources.getResource(fileName),Charsets.UTF_8));
       RecordBatchLoader loader = new RecordBatchLoader(bit1.getContext().getAllocator());
       int count = 0;
       for (QueryResultBatch b : results) {
-        System.out.println(String.format("Got %d results", b.getHeader().getRowCount()));
+        System.out.println(String.format("\nGot %d results", b.getHeader().getRowCount()));
         count += b.getHeader().getRowCount();
         loader.load(b.getHeader().getDef(), b.getData());
         for (VectorWrapper vw : loader) {

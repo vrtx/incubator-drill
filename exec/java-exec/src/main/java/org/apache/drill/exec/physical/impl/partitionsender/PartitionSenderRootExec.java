@@ -32,6 +32,7 @@ import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.physical.impl.RootExec;
 import org.apache.drill.exec.physical.impl.filter.ReturnValueExpression;
 import org.apache.drill.exec.proto.CoordinationProtos;
+import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.TypedFieldId;
 import org.apache.drill.exec.record.VectorWrapper;
@@ -53,6 +54,7 @@ class PartitionSenderRootExec implements RootExec {
   private OutgoingRecordBatch[] outgoing;
   private Partitioner partitioner;
   private FragmentContext context;
+  private BatchSchema schema;
   private boolean ok = true;
 
   public PartitionSenderRootExec(FragmentContext context,
@@ -98,21 +100,24 @@ class PartitionSenderRootExec implements RootExec {
         return false;
 
       case OK_NEW_SCHEMA:
-        try {
-          // send all existing batches
-          if (partitioner != null) {
-            flushOutgoingBatches(false, true);
+        if (!incoming.getSchema().equals(schema)) {
+          schema = incoming.getSchema();
+          try {
+            // send all existing batches
+            if (partitioner != null) {
+              flushOutgoingBatches(false, true);
+            }
+            for (OutgoingRecordBatch b : outgoing) {
+              b.initializeBatch();
+            }
+            // update OutgoingRecordBatch's schema and generate partitioning code
+            createPartitioner();
+          } catch (SchemaChangeException e) {
+            incoming.kill();
+            logger.error("Error while creating partitioning sender or flushing outgoing batches", e);
+            context.fail(e);
+            return false;
           }
-          for (OutgoingRecordBatch b : outgoing) {
-            b.initializeBatch();
-          }
-          // update OutgoingRecordBatch's schema and generate partitioning code
-          createPartitioner();
-        } catch (SchemaChangeException e) {
-          incoming.kill();
-          logger.error("Error while creating partitioning sender or flushing outgoing batches", e);
-          context.fail(e);
-          return false;
         }
       case OK:
         partitioner.partitionBatch(incoming);

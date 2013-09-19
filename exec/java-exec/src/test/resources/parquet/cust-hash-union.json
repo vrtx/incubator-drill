@@ -1,0 +1,68 @@
+{
+  head : {
+    type : "APACHE_DRILL_PHYSICAL",
+    version : 1,
+    generator : {
+      type : "optiq",
+      info : "na"
+    }
+  },
+  graph : [ {
+    pop : "parquet-scan",
+    @id : 1,
+    entries : [ {
+      path : "/data/tpc-h/customer"
+    } ],
+    storageengine : {
+      type : "parquet",
+      dfsName : "file:///"
+    },
+    ref : "_MAP",
+    fragmentPointer : 0
+  }, {
+    pop : "project",
+    @id : 2,
+    exprs : [ {
+      ref : "output.NATIONKEY",
+      expr : "_MAP.C_NATIONKEY"
+    }, {
+      ref : "output.CUSTKEY",
+      expr : "_MAP.C_CUSTKEY"
+    } ],
+    child : 1
+  }, {
+    pop : "hash-to-random-exchange",
+    @id : 3,
+    expr : "hash(NATIONKEY)",
+    child : 2
+  }, {
+    pop : "sort",
+    @id : 4,
+    child : 3,
+    orderings : [ {
+      order : "ASC",
+      expr : "NATIONKEY"
+    } ],
+    reverse : false
+  }, {
+    pop : "streaming-aggregate",
+    @id : 5,
+    child : 4,
+    keys : [ {
+      ref : "NATIONKEY",
+      expr : "NATIONKEY"
+    } ],
+    exprs : [ {
+      ref : "CUSTOMERS",
+      expr : "count(CUSTKEY) "
+    } ]
+  }, {
+    pop : "union-exchange",
+    @id : 6,
+    child : 5
+  }, {
+    pop : "screen",
+    @id : 7,
+    child : 6
+  } ]
+}
