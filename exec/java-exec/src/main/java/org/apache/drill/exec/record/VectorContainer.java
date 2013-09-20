@@ -34,7 +34,6 @@ public class VectorContainer implements Iterable<VectorWrapper<?>> {
   private final List<VectorWrapper<?>> wrappers = Lists.newArrayList();
   private final List<VectorWrapper<?>> oldWrappers = Lists.newArrayList();
   private BatchSchema schema;
-
   public VectorContainer() {
   }
 
@@ -143,6 +142,7 @@ public class VectorContainer implements Iterable<VectorWrapper<?>> {
   }
 
   public BatchSchema getSchema() {
+    if (schema == null) System.out.println("getting null schema for VectorContainer: " + this);
     Preconditions
         .checkNotNull(schema,
             "Schema is currently null.  You must call buildSchema(SelectionVectorMode) before this container can return a schema.");
@@ -155,6 +155,7 @@ public class VectorContainer implements Iterable<VectorWrapper<?>> {
       bldr.addField(v.getField());
     }
     this.schema = bldr.build();
+    if (schema == null) System.out.println("built null schema for VectorContainer: " + this);
   }
 
   @Override

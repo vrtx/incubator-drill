@@ -18,10 +18,8 @@
 package org.apache.drill.exec.physical.impl.sort;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
-import com.beust.jcommander.internal.Lists;
 import org.apache.commons.collections.map.HashedMap;
 import org.apache.drill.common.defs.OrderDef;
 import org.apache.drill.common.expression.*;
@@ -66,7 +64,7 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
 
   @Override
   public int getRecordCount() {
-    return sv4.getCount();
+    return sv4 != null ? sv4.getCount() : 0;
   }
 
   @Override
@@ -148,8 +146,13 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
           throw new UnsupportedOperationException();
         }
       }
-      
+
       builder.build(context);
+      if (builder.getBatchCount() == 0) {
+        // if no batches were received, return an outcome of NONE.
+        System.out.println("Schema for batch with 0 entries: " + schema + ", container: " + container);
+        return IterOutcome.NONE;
+      }
       sv4 = builder.getSv4();
 
       sorter = createNewSorter();

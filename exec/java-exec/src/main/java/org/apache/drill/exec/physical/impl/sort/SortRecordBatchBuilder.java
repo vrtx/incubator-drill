@@ -77,7 +77,6 @@ public class SortRecordBatchBuilder {
     if(batchBytes + runningBytes > maxBytes) return false; // enough data memory.
     if(runningBatches+1 > Character.MAX_VALUE) return false; // allowed in batch.
     if(!svAllocator.preAllocate(batch.getRecordCount()*4)) return false;  // sv allocation available.
-      
    
     RecordBatchData bd = new RecordBatchData(batch);
     runningBytes += batchBytes;
@@ -91,6 +90,12 @@ public class SortRecordBatchBuilder {
     if(batches.keySet().size() > 1) throw new SchemaChangeException("Sort currently only supports a single schema.");
     if(batches.size() > Character.MAX_VALUE) throw new SchemaChangeException("Sort cannot work on more than %d batches at a time.", (int) Character.MAX_VALUE);
     sv4 = new SelectionVector4(svAllocator.getAllocation(), recordCount, Character.MAX_VALUE);
+    if (!batches.keySet().iterator().hasNext()) {
+      // no batches added to this sorter; no need to build the hyper batch
+      System.out.println("SRBB: sorter has no batches.  building schema for 0 records.  container: " + container);
+      return;
+    }
+
     BatchSchema schema = batches.keySet().iterator().next();
     List<RecordBatchData> data = batches.get(schema);
     
@@ -138,6 +143,10 @@ public class SortRecordBatchBuilder {
     }
     
     container.buildSchema(SelectionVectorMode.FOUR_BYTE);
+  }
+  
+  public int getBatchCount() {
+    return batches.size();
   }
 
   public SelectionVector4 getSv4() {

@@ -51,22 +51,22 @@ public class TestParquetPhysicalPlan {
     DrillConfig config = DrillConfig.create();
 
     try(Drillbit bit1 = new Drillbit(config, serviceSet);
-        Drillbit bit2 = new Drillbit(config, serviceSet);
-        Drillbit bit3 = new Drillbit(config, serviceSet);
-        Drillbit bit4 = new Drillbit(config, serviceSet);
-        Drillbit bit5 = new Drillbit(config, serviceSet);
-        Drillbit bit6 = new Drillbit(config, serviceSet);
-        Drillbit bit7 = new Drillbit(config, serviceSet);
-        Drillbit bit8 = new Drillbit(config, serviceSet);
+        //Drillbit bit2 = new Drillbit(config, serviceSet);
+        //Drillbit bit3 = new Drillbit(config, serviceSet);
+        //Drillbit bit4 = new Drillbit(config, serviceSet);
+        //Drillbit bit5 = new Drillbit(config, serviceSet);
+        //Drillbit bit6 = new Drillbit(config, serviceSet);
+        //Drillbit bit7 = new Drillbit(config, serviceSet);
+        //Drillbit bit8 = new Drillbit(config, serviceSet);
         DrillClient client = new DrillClient(config, serviceSet.getCoordinator());) {
       bit1.run();
-      bit2.run();
-      bit3.run();
-      bit4.run();
-      bit5.run();
-      bit6.run();
-      bit7.run();
-      bit8.run();
+      //bit2.run();
+      //bit3.run();
+      //bit4.run();
+      //bit5.run();
+      //bit6.run();
+      //bit7.run();
+      //bit8.run();
       client.connect();
       List<QueryResultBatch> results = client.runQuery(UserProtos.QueryType.PHYSICAL, Resources.toString(Resources.getResource(fileName),Charsets.UTF_8));
       RecordBatchLoader loader = new RecordBatchLoader(bit1.getContext().getAllocator());

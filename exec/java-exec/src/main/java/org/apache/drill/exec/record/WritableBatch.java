@@ -21,6 +21,7 @@ import io.netty.buffer.ByteBuf;
 
 import java.util.List;
 
+import org.apache.drill.exec.proto.SchemaDefProtos;
 import org.apache.drill.exec.proto.UserBitShared.FieldMetadata;
 import org.apache.drill.exec.proto.UserBitShared.RecordBatchDef;
 import org.apache.drill.exec.record.BatchSchema.SelectionVectorMode;
@@ -89,7 +90,20 @@ public class WritableBatch {
     return b;
   }
   
+  public static WritableBatch getEmptyBatch(RecordBatch batch) {
+    RecordBatchDef.Builder defBuilder = RecordBatchDef.newBuilder();
+    List<ByteBuf> buffers = Lists.newArrayList();
+    //for (MaterializedField mf : batch.getSchema()) {
+    //  defBuilder.addField(FieldMetadata.newBuilder().setDef(mf.getDef()).build());
+    //}
+    defBuilder.setRecordCount(0);
+    WritableBatch b = new WritableBatch(defBuilder.build(), buffers);
+    return b;
+  }
+
   public static WritableBatch get(RecordBatch batch) {
+    if (batch.getRecordCount() == 0)
+      return getEmptyBatch(batch);
     if(batch.getSchema() != null && batch.getSchema().getSelectionVectorMode() != SelectionVectorMode.NONE) throw new UnsupportedOperationException("Only batches without selections vectors are writable.");
     return getBatchNoSVWrap(batch.getRecordCount(), batch);
   }

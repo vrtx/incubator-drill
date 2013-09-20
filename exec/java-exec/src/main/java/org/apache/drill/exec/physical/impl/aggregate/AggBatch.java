@@ -73,7 +73,7 @@ public class AggBatch extends AbstractRecordBatch<StreamingAggregate> {
 
   @Override
   public int getRecordCount() {
-    if(done) return 0;
+    if(done || incoming.getRecordCount() == 0) return 0;
     return aggregator.getOutputCount();
   }
 
@@ -90,6 +90,8 @@ public class AggBatch extends AbstractRecordBatch<StreamingAggregate> {
       case STOP:
         return outcome;
       case OK_NEW_SCHEMA:
+        if (incoming.getRecordCount() == 0)
+          return IterOutcome.NONE;
         if (!createAggregator()){
           done = true;
           return IterOutcome.STOP;
