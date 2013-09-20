@@ -66,11 +66,14 @@ class PartitionSenderRootExec implements RootExec {
     this.context = context;
     this.outgoing = new OutgoingRecordBatch[operator.getDestinations().size()];
     int fieldId = 0;
-    for (CoordinationProtos.DrillbitEndpoint endpoint : operator.getDestinations())
-      outgoing[fieldId++] = new OutgoingRecordBatch(operator,
+    for (CoordinationProtos.DrillbitEndpoint endpoint : operator.getDestinations()) {
+      outgoing[fieldId] = new OutgoingRecordBatch(operator,
                                                     context.getCommunicator().getTunnel(endpoint),
                                                     incoming,
-                                                    context);
+                                                    context,
+                                                    fieldId);
+      fieldId++;
+    }
   }
 
   @Override
