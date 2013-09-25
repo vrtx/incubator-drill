@@ -90,9 +90,15 @@ public class SortRecordBatchBuilder {
     if(batches.keySet().size() > 1) throw new SchemaChangeException("Sort currently only supports a single schema.");
     if(batches.size() > Character.MAX_VALUE) throw new SchemaChangeException("Sort cannot work on more than %d batches at a time.", (int) Character.MAX_VALUE);
     sv4 = new SelectionVector4(svAllocator.getAllocation(), recordCount, Character.MAX_VALUE);
-    if (!batches.keySet().iterator().hasNext()) {
+    if (batches.size() == 0) {
       // no batches added to this sorter; no need to build the hyper batch
+      logger.warn("SRBB: sorter has no batches.  building schema for 0 records.  container: {}", container);
       System.out.println("SRBB: sorter has no batches.  building schema for 0 records.  container: " + container);
+      //for(ValueVector v : ){
+      //  vectors.put(v.getField(), v);
+      //  container.addCollection();
+      //}
+      container.buildSchema(SelectionVectorMode.NONE);
       return;
     }
 

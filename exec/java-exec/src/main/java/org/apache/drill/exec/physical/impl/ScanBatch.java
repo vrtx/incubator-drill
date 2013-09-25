@@ -137,7 +137,10 @@ public class ScanBatch implements RecordBatch {
     return container.getValueAccessorById(fieldId, clazz);
   }
 
-
+  @Override
+  public VectorContainer getContainer() {
+    return container;
+  }
 
   private class Mutator implements OutputMutator {
 

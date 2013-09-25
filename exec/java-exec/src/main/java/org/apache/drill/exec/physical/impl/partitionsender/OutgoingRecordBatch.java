@@ -231,6 +231,11 @@ public class OutgoingRecordBatch implements RecordBatch {
   }
 
   @Override
+  public VectorContainer getContainer() {
+    return vectorContainer;
+  }
+
+  @Override
   public Iterator<VectorWrapper<?>> iterator() {
     return vectorContainer.iterator();
   }

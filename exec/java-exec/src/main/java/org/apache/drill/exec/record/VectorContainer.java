@@ -155,9 +155,13 @@ public class VectorContainer implements Iterable<VectorWrapper<?>> {
       bldr.addField(v.getField());
     }
     this.schema = bldr.build();
-    if (schema == null) System.out.println("built null schema for VectorContainer: " + this);
+    if (schema == null) System.out.println("Built null schema for VectorContainer: " + this);
   }
 
+  public void setSchema(BatchSchema schema) {
+    this.schema = schema;
+  }
+  
   @Override
   public Iterator<VectorWrapper<?>> iterator() {
     return wrappers.iterator();

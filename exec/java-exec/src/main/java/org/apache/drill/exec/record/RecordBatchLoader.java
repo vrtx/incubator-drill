@@ -58,7 +58,7 @@ public class RecordBatchLoader implements Iterable<VectorWrapper<?>>{
    * @throws SchemaChangeException
    */
   public boolean load(RecordBatchDef def, ByteBuf buf) throws SchemaChangeException {
-//    logger.debug("Loading record batch with def {} and data {}", def, buf);
+    logger.debug("Loading record batch with def {} and data {}", def, buf);
     this.valueCount = def.getRecordCount();
     boolean schemaChanged = schema == null;
 
@@ -88,7 +88,8 @@ public class RecordBatchLoader implements Iterable<VectorWrapper<?>>{
       if (fmd.getValueCount() == 0){
         v.clear();
       } else {
-        v.load(fmd, buf.slice(bufOffset, fmd.getBufferLength()));
+        if (buf != null)
+          v.load(fmd, buf.slice(bufOffset, fmd.getBufferLength()));
       }
       bufOffset += fmd.getBufferLength();
       newVectors.add(v);

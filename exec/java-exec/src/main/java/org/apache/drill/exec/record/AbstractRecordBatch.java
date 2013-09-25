@@ -89,7 +89,11 @@ public abstract class AbstractRecordBatch<T extends PhysicalOperator> implements
     return container.getValueAccessorById(fieldId, clazz);
   }
 
-  
+  @Override
+  public VectorContainer getContainer() {
+    return container;
+  }
+
   @Override
   public WritableBatch getWritableBatch() {
     return WritableBatch.get(this);

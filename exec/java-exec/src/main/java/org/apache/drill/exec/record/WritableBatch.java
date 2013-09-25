@@ -93,9 +93,9 @@ public class WritableBatch {
   public static WritableBatch getEmptyBatch(RecordBatch batch) {
     RecordBatchDef.Builder defBuilder = RecordBatchDef.newBuilder();
     List<ByteBuf> buffers = Lists.newArrayList();
-    //for (MaterializedField mf : batch.getSchema()) {
-    //  defBuilder.addField(FieldMetadata.newBuilder().setDef(mf.getDef()).build());
-    //}
+    for (MaterializedField mf : batch.getSchema()) {
+      defBuilder.addField(FieldMetadata.newBuilder().setDef(mf.getDef()).build());
+    }
     defBuilder.setRecordCount(0);
     WritableBatch b = new WritableBatch(defBuilder.build(), buffers);
     return b;

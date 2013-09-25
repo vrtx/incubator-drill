@@ -65,6 +65,14 @@ public interface RecordBatch extends Iterable<VectorWrapper<?>> {
   public BatchSchema getSchema();
 
   /**
+   * Provide the value vector container of the current RecordBatch. This changes if and only if a *_NEW_SCHEMA
+   * IterOutcome is provided.
+   *
+   * @return
+   */
+  public VectorContainer getContainer();
+
+  /**
    * Provide the number of records that are within this record count
    * 
    * @return

@@ -26,6 +26,7 @@ import org.apache.drill.common.expression.ExpressionPosition;
 import org.apache.drill.common.expression.FunctionCall;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.common.logical.data.NamedExpression;
+import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.exec.compile.sig.GeneratorMapping;
 import org.apache.drill.exec.compile.sig.MappingSet;
 import org.apache.drill.exec.exception.ClassTransformationException;
@@ -83,15 +84,19 @@ public class AggBatch extends AbstractRecordBatch<StreamingAggregate> {
     // this is only called on the first batch. Beyond this, the aggregator manages batches.
     if (aggregator == null) {
       IterOutcome outcome = incoming.next();
-      logger.debug("Next outcome of {}", outcome);
+      logger.debug("Incoming batch provided outcome of {}, record count {}", outcome, incoming.getSelectionVector4() != null ? incoming.getRecordCount() : "null");
+      //logger.debug("incoming schema {}", incoming.getSchema());
       switch (outcome) {
       case NONE:
       case NOT_YET:
       case STOP:
+        //this.container.setSchema(incoming.getContainer().getSchema());
         return outcome;
       case OK_NEW_SCHEMA:
-        if (incoming.getRecordCount() == 0)
-          return IterOutcome.NONE;
+        if (incoming.getRecordCount() == 0) {
+          this.container.setSchema(incoming.getSchema());
+          return outcome;
+        }
         if (!createAggregator()){
           done = true;
           return IterOutcome.STOP;

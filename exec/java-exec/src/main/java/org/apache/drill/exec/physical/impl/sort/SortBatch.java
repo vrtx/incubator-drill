@@ -64,6 +64,7 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
 
   @Override
   public int getRecordCount() {
+    //return sv4.getCount();
     return sv4 != null ? sv4.getCount() : 0;
   }
 
@@ -107,6 +108,17 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
         IterOutcome upstream = incoming.next();
         switch (upstream) {
         case NONE:
+          logger.warn("SortBatch upstream NONE.  incoming schema: {}, current schema: {}", incoming.getSchema(), schema);
+          //if (!incoming.getSchema().equals(schema)){
+          if (schema == null) {
+            if (builder != null) throw new UnsupportedOperationException("Sort doesn't currently support sorts with changing schemas.");
+            builder = new SortRecordBatchBuilder(context.getAllocator(), MAX_SORT_BYTES, container);
+            System.out.println("SortBatch: Incoming batch iter returned NONE with schemas: " + incoming.getSchema() + "\n" + schema);
+            if(!builder.add(incoming)){
+              throw new UnsupportedOperationException("Sort doesn't currently support doing an external sort.");
+            };
+            //this.schema = incoming.getSchema();
+          }
           break outer;
         case NOT_YET:
         case STOP:
@@ -134,7 +146,7 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
                 //if (i % 10 == 0) System.out.println();
               }
               
-              System.out.println(f++ + ": Total unique values in this fragment batch: " + values.size());
+              System.out.println(f++ + ": Total unique values in this sort batch: " + values.size());
             }
           }
 
@@ -151,6 +163,7 @@ public class SortBatch extends AbstractRecordBatch<Sort> {
       if (builder.getBatchCount() == 0) {
         // if no batches were received, return an outcome of NONE.
         System.out.println("Schema for batch with 0 entries: " + schema + ", container: " + container);
+        container.setSchema(schema);
         return IterOutcome.NONE;
       }
       sv4 = builder.getSv4();
