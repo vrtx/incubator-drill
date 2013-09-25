@@ -17,19 +17,7 @@
  */
 package org.apache.drill.exec.physical.base;
 
-import org.apache.drill.exec.physical.config.Filter;
-import org.apache.drill.exec.physical.config.HashPartitionSender;
-import org.apache.drill.exec.physical.config.HashToRandomExchange;
-import org.apache.drill.exec.physical.config.MergeJoinPOP;
-import org.apache.drill.exec.physical.config.Project;
-import org.apache.drill.exec.physical.config.RandomReceiver;
-import org.apache.drill.exec.physical.config.RangeSender;
-import org.apache.drill.exec.physical.config.Screen;
-import org.apache.drill.exec.physical.config.SingleSender;
-import org.apache.drill.exec.physical.config.Sort;
-import org.apache.drill.exec.physical.config.StreamingAggregate;
-import org.apache.drill.exec.physical.config.Union;
-import org.apache.drill.exec.physical.config.UnionExchange;
+import org.apache.drill.exec.physical.config.*;
 
 public abstract class AbstractPhysicalVisitor<T, X, E extends Throwable> implements PhysicalVisitor<T, X, E> {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractPhysicalVisitor.class);
@@ -110,6 +98,11 @@ public abstract class AbstractPhysicalVisitor<T, X, E extends Throwable> impleme
 
   @Override
   public T visitRandomReceiver(RandomReceiver op, X value) throws E {
+    return visitReceiver(op, value);
+  }
+
+  @Override
+  public T visitMergingReceiver(MergingReceiver op, X value) throws E {
     return visitReceiver(op, value);
   }
 
