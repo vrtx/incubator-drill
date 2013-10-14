@@ -51,7 +51,7 @@ public class MergingRecordBatch implements RecordBatch {
     this.batchLoader = new RecordBatchLoader(context.getAllocator());
 
     for (RawFragmentBatchProvider provider : fragProviders)
-      System.out.println(" + Adding fragment provider to MergingRecordBatch: " + provider);
+      logger.info(" + Adding fragment provider to MergingRecordBatch {} ", provider);
 
   }
 
