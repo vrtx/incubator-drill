@@ -186,7 +186,7 @@ public class ImplCreator extends AbstractPhysicalVisitor<RecordBatch, FragmentCo
   }
 
   @Override
-  public RecordBatch visitMergingReceiver(MergingReceiver op, FragmentContext context) throws ExecutionSetupException {
+  public RecordBatch visitMergingReceiver(MergingReceiverPOP op, FragmentContext context) throws ExecutionSetupException {
     return mrc.getBatch(context, op, null);
   }
 

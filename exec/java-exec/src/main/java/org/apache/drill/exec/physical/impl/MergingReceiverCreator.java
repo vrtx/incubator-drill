@@ -19,19 +19,20 @@ package org.apache.drill.exec.physical.impl;
 
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.physical.config.MergingReceiver;
+import org.apache.drill.exec.physical.config.MergingReceiverPOP;
+import org.apache.drill.exec.physical.impl.mergereceiver.MergingRecordBatch;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.work.batch.IncomingBuffers;
 import org.apache.drill.exec.work.batch.RawBatchBuffer;
 
 import java.util.List;
 
-public class MergingReceiverCreator implements BatchCreator<MergingReceiver> {
+public class MergingReceiverCreator implements BatchCreator<MergingReceiverPOP> {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MergingReceiverCreator.class);
 
   @Override
   public RecordBatch getBatch(FragmentContext context,
-                              MergingReceiver receiver,
+                              MergingReceiverPOP receiver,
                               List<RecordBatch> children)
       throws ExecutionSetupException {
 
@@ -41,11 +42,7 @@ public class MergingReceiverCreator implements BatchCreator<MergingReceiver> {
     assert bufHolder != null : "IncomingBuffers must be defined for any place a receiver is declared.";
     RawBatchBuffer[] buffers = bufHolder.getBuffers(receiver.getOppositeMajorFragmentId());
 
-    assert buffers.length == 1;
-    RawBatchBuffer buffer = buffers[0];
-
-    // TODO: MergingRecordBatch
-    return new WireRecordBatch(context, buffer);
+    return new MergingRecordBatch(context, buffers);
   }
   
   
