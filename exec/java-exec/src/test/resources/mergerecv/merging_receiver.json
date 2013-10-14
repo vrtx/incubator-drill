@@ -39,7 +39,7 @@
       @id: 4,
       child: 3,
       pop: "single-merge-exchange",
-      expr: "hash(red)"
+      expr: "blue"
     },
     {
       @id: 5,
