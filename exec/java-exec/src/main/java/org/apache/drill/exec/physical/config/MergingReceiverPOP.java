@@ -20,6 +20,7 @@ package org.apache.drill.exec.physical.config;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.exec.physical.OperatorCost;
 import org.apache.drill.exec.physical.base.AbstractReceiver;
 import org.apache.drill.exec.physical.base.PhysicalVisitor;
@@ -28,23 +29,22 @@ import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 
 import java.util.List;
 
-//
-// TODO: add equality expression for batch inclusion
-//
-
 @JsonTypeName("merging-receiver")
-public class MergingReceiver extends AbstractReceiver{
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MergingReceiver.class);
+public class MergingReceiverPOP extends AbstractReceiver{
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MergingReceiverPOP.class);
 
-  private List<DrillbitEndpoint> senders;
-  
+  private final List<DrillbitEndpoint> senders;
+  private final LogicalExpression expression;
+
   @JsonCreator
-  public MergingReceiver(@JsonProperty("sender-major-fragment") int oppositeMajorFragmentId,
-                         @JsonProperty("senders") List<DrillbitEndpoint> senders) {
+  public MergingReceiverPOP(@JsonProperty("sender-major-fragment") int oppositeMajorFragmentId,
+                            @JsonProperty("senders") List<DrillbitEndpoint> senders,
+                            @JsonProperty("merge-expressions") LogicalExpression expression) {
     super(oppositeMajorFragmentId);
     this.senders = senders;
+    this.expression = expression;
   }
-  
+
   @Override
   @JsonProperty("senders")
   public List<DrillbitEndpoint> getProvidingEndpoints() {
@@ -53,7 +53,7 @@ public class MergingReceiver extends AbstractReceiver{
 
   @Override
   public boolean supportsOutOfOrderExchange() {
-    return true;
+    return false;
   }
 
   @Override
@@ -71,6 +71,10 @@ public class MergingReceiver extends AbstractReceiver{
   public Size getSize() {
     //TODO: deal with size info through exchange.
     return new Size(1,1);
+  }
+
+  public LogicalExpression getExpression() {
+    return expression;
   }
 
 }

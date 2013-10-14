@@ -21,11 +21,12 @@ import org.apache.drill.exec.physical.config.Filter;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.physical.config.HashToRandomExchange;
 import org.apache.drill.exec.physical.config.MergeJoinPOP;
+import org.apache.drill.exec.physical.config.MergingReceiverPOP;
 import org.apache.drill.exec.physical.config.Project;
-import org.apache.drill.exec.physical.config.MergingReceiver;
 import org.apache.drill.exec.physical.config.RandomReceiver;
 import org.apache.drill.exec.physical.config.RangeSender;
 import org.apache.drill.exec.physical.config.Screen;
+import org.apache.drill.exec.physical.config.SingleMergeExchange;
 import org.apache.drill.exec.physical.config.SingleSender;
 import org.apache.drill.exec.physical.config.Sort;
 import org.apache.drill.exec.physical.config.StreamingAggregate;
@@ -60,10 +61,11 @@ public interface PhysicalVisitor<RETURN, EXTRA, EXCEP extends Throwable> {
   
   public RETURN visitHashPartitionSender(HashPartitionSender op, EXTRA value) throws EXCEP;
   public RETURN visitRandomReceiver(RandomReceiver op, EXTRA value) throws EXCEP;
-  public RETURN visitMergingReceiver(MergingReceiver op, EXTRA value) throws EXCEP;
+  public RETURN visitMergingReceiver(MergingReceiverPOP op, EXTRA value) throws EXCEP;
   public RETURN visitHashPartitionSender(HashToRandomExchange op, EXTRA value) throws EXCEP;
   public RETURN visitRangeSender(RangeSender op, EXTRA value) throws EXCEP;
   public RETURN visitScreen(Screen op, EXTRA value) throws EXCEP;
   public RETURN visitSingleSender(SingleSender op, EXTRA value) throws EXCEP;
   public RETURN visitUnionExchange(UnionExchange op, EXTRA value) throws EXCEP;
+  public RETURN visitSingleMergeExchange(SingleMergeExchange op, EXTRA value) throws EXCEP;
 }

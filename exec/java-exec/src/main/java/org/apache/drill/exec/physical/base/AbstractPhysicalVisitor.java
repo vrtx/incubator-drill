@@ -21,11 +21,12 @@ import org.apache.drill.exec.physical.config.Filter;
 import org.apache.drill.exec.physical.config.HashPartitionSender;
 import org.apache.drill.exec.physical.config.HashToRandomExchange;
 import org.apache.drill.exec.physical.config.MergeJoinPOP;
-import org.apache.drill.exec.physical.config.MergingReceiver;
+import org.apache.drill.exec.physical.config.MergingReceiverPOP;
 import org.apache.drill.exec.physical.config.Project;
 import org.apache.drill.exec.physical.config.RandomReceiver;
 import org.apache.drill.exec.physical.config.RangeSender;
 import org.apache.drill.exec.physical.config.Screen;
+import org.apache.drill.exec.physical.config.SingleMergeExchange;
 import org.apache.drill.exec.physical.config.SingleSender;
 import org.apache.drill.exec.physical.config.Sort;
 import org.apache.drill.exec.physical.config.StreamingAggregate;
@@ -115,7 +116,7 @@ public abstract class AbstractPhysicalVisitor<T, X, E extends Throwable> impleme
   }
 
   @Override
-  public T visitMergingReceiver(MergingReceiver op, X value) throws E {
+  public T visitMergingReceiver(MergingReceiverPOP op, X value) throws E {
     return visitReceiver(op, value);
   }
 
@@ -141,6 +142,11 @@ public abstract class AbstractPhysicalVisitor<T, X, E extends Throwable> impleme
 
   @Override
   public T visitUnionExchange(UnionExchange op, X value) throws E {
+    return visitExchange(op, value);
+  }
+
+  @Override
+  public T visitSingleMergeExchange(SingleMergeExchange op, X value) throws E {
     return visitExchange(op, value);
   }
 
