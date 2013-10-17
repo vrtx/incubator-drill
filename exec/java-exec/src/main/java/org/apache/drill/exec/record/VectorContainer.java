@@ -78,7 +78,7 @@ public class VectorContainer implements Iterable<VectorWrapper<?>> {
   private void cloneAndTransfer(VectorWrapper<?> wrapper) {
     wrappers.add(wrapper.cloneAndTransfer());
   }
-
+  
   public void addCollection(Iterable<ValueVector> vectors) {
     schema = null;
     for (ValueVector vv : vectors) {

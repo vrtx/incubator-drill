@@ -29,6 +29,10 @@ import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 
 import java.util.List;
 
+// The goal of this operator is to produce outgoing batches with records
+// ordered according to the supplied expression.  Each incoming batch
+// is guaranteed to be in order, so the operator simply merges the incoming
+// batches.  This is accomplished by building and depleting a priority queue.
 @JsonTypeName("merging-receiver")
 public class MergingReceiverPOP extends AbstractReceiver{
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MergingReceiverPOP.class);
