@@ -25,6 +25,7 @@ import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.proto.UserBitShared;
 import org.apache.drill.exec.record.BatchSchema;
+import org.apache.drill.exec.record.DeadBuf;
 import org.apache.drill.exec.record.RawFragmentBatch;
 import org.apache.drill.exec.record.RawFragmentBatchProvider;
 import org.apache.drill.exec.record.RecordBatch;
@@ -41,6 +42,7 @@ import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.allocator.VectorAllocator;
 
 import java.lang.Class;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.PriorityQueue;
 
@@ -59,7 +61,7 @@ public class MergingRecordBatch implements RecordBatch {
   private final RawFragmentBatch[] incomingBatches;
   private final VectorWrapper[] incomingVectors;
   private int[] batchOffsets;
-  private PriorityQueue <Object> pqueue;
+  private PriorityQueue <Node> pqueue;
 
   public MergingRecordBatch(FragmentContext context, RawFragmentBatchProvider[] fragProviders) {
     this.fragProviders = fragProviders;
@@ -70,7 +72,13 @@ public class MergingRecordBatch implements RecordBatch {
     this.incomingVectors = new VectorWrapper[senderCount];
     this.incomingBatches = new RawFragmentBatch[senderCount];
     this.batchOffsets = new int[senderCount];
-    this.pqueue = new PriorityQueue<>();
+    this.pqueue = new PriorityQueue<Node>(fragProviders.length, new Comparator<Node>() {
+      public int compare(Node node1, Node node2) {
+        if (node1.valueIndex < node2.valueIndex) return -1;
+        if (node1.valueIndex > node2.valueIndex) return 1;
+        return 0;
+      }
+    });
     this.outgoingContainer = new VectorContainer();
 
     // allocate the incoming record batch loaders (loaded in next())
@@ -128,17 +136,29 @@ public class MergingRecordBatch implements RecordBatch {
   public VectorWrapper<?> getValueAccessorById(int fieldId, Class<?> clazz) {
     return outgoingContainer.getValueAccessorById(fieldId, clazz);
   }
+  
+  private class Node {
+    int batchId;
+    int valueIndex;
+    public Node(int batchId, int valueIndex) {
+      this.batchId = batchId;
+      this.valueIndex = valueIndex;
+    }
+  }
 
   @Override
   public IterOutcome next() {
 
     // invariants
     if (fragProviders.length == 0) return IterOutcome.NONE;
+    // TODO: temp testing
+    final SchemaPath path = new SchemaPath("blue", ExpressionPosition.UNKNOWN);
+    final Class <BigIntVector> clazz = BigIntVector.class;
 
     boolean schemaChanged = false;
 
     if (!hasRun) {
-      schemaChanged = true; // first iteration is a schema change
+      schemaChanged = true; // first iteration is always a schema change
       
       // set up each incoming record batch
       int batchCount = 0;
@@ -184,43 +204,70 @@ public class MergingRecordBatch implements RecordBatch {
       }
       schema = batchSchema;
 
+      // populate the priority queue with initial values
+      int batchId = 0;
+      for (RecordBatchLoader loader : batchLoaders) {
+        Node value = new Node(batchId, 0);
+        //loader.getValueAccessorById(loader.getValueVectorId(path).getFieldId(), clazz)
+        //  .getValueVector()
+        //  .getAccessor()
+        //  .getObject(0));
+        pqueue.add(value);
+        ++batchId;
+      }
+
       hasRun = true;
     }
 
-    // populate the priority queue with initial values
-    SchemaPath path = new SchemaPath("blue", ExpressionPosition.UNKNOWN);
-    Class <BigIntVector> clazz = BigIntVector.class;  // TODO: testing
-    for (RecordBatchLoader loader : batchLoaders) {
-      Object value = loader.getValueAccessorById(loader.getValueVectorId(path).getFieldId(), clazz)
-                              .getValueVector()
-                              .getAccessor()
-                              .getObject(0);
-      pqueue.add(value);
+    while (!pqueue.isEmpty()) {
+      // pop next value from pq and copy to outgoing batch
+      Node node = pqueue.peek();
+      copyRecordToOutgoingBatch(pqueue.poll(), outgoingContainer);
+      if (node.valueIndex == batchLoaders[node.batchId].getRecordCount()) {
+        // reached the end of a record batch
+        incomingBatches[node.batchId] = fragProviders[node.batchId].getNext();
+        if (incomingBatches[node.batchId].getHeader().getIsLastBatch()) {
+          // batch is empty
+          incomingBatches[node.batchId].release();
+          boolean allBatchesEmpty = true;
+          for (RawFragmentBatch batch : incomingBatches) {
+            // see if all batches are empty (time to return IterOutcome.NONE)
+            if (!batch.getHeader().getIsLastBatch()) {
+              allBatchesEmpty = false;
+              break;
+            }
+          }
+          if (allBatchesEmpty)
+            return IterOutcome.NONE;
+          // this batch is empty and will not be used again since the pqueue no longer contains a reference
+          continue;
+        }
+        UserBitShared.RecordBatchDef rbd = incomingBatches[node.batchId].getHeader().getDef();
+        try {
+            batchLoaders[node.batchId].load(rbd, incomingBatches[node.batchId].getBody());
+          } catch(SchemaChangeException ex) {
+            context.fail(ex);
+            return IterOutcome.STOP;
+          }
+        incomingBatches[node.batchId].release();
+        batchOffsets[node.batchId] = 0;
+        // add front value from batch[x] to priority queue
+        if (batchLoaders[node.batchId].getRecordCount() != 0)
+          pqueue.add(new Node(node.batchId, 0));
+      } else {
+        pqueue.add(new Node(node.batchId, node.valueIndex + 1));
+      }
     }
-
-
-    // while true:
-    // pop lowest from pq and copy to outgoing batch
-    // if pop'd value came from a batch with more records:
-      // add front value from batch[x] to priority queue
-      // if outgoing is full, flush outgoing batch
-
-    for (Object val : pqueue) {
-      logger.warn("First values from batch {} ", val);
-    }
-
-    doWork();
+    // TODO: if outgoing is full, return OK/OK_NEW_SCHEMA and maintain state!
 
     if (schemaChanged)
       return IterOutcome.OK_NEW_SCHEMA;
     else
       return IterOutcome.OK;
-
   }
 
-
-  private void doWork() {
-
+  private void copyRecordToOutgoingBatch(Node node, VectorContainer outgoing) {
+    System.out.println(" + Copying value.  batch: [" + node.batchId + "], rowIndex: [" + node.valueIndex + "]");
   }
 
   private void setupNewSchema() {

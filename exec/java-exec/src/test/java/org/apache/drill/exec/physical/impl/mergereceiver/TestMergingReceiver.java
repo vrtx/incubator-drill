@@ -54,11 +54,14 @@ public class TestMergingReceiver extends PopUnitTestBase {
         Files.toString(FileUtils.getResourceAsFile("/mergerecv/merging_receiver.json"),
           Charsets.UTF_8));
       int count = 0;
+      int batchCount = 0;
       for(QueryResultBatch b : results) {
         if (b.getHeader().getRowCount() != 0)
           count += b.getHeader().getRowCount();
+        batchCount++;
       }
-//      assertEquals(100, count);
+      System.out.println("Batch Count: " + batchCount);
+      assertEquals(200, count);
     }
   }
 
