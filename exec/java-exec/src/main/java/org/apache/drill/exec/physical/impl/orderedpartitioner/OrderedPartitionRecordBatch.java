@@ -197,7 +197,6 @@ public class OrderedPartitionRecordBatch extends AbstractRecordBatch<OrderedPart
       // Extract vectors from the wrapper, and add to partition vectors. These vectors will be used for partitioning in the rest of this operator
       for (VectorWrapper<?> w : wrap.get()) {
         partitionVectors.add(w.getValueVector());
-
       }
     } catch (ClassTransformationException | IOException | SchemaChangeException | InterruptedException ex) {
       kill();
