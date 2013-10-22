@@ -17,18 +17,13 @@
  */
 package org.apache.drill.exec.cache;
 
-import com.beust.jcommander.internal.Lists;
-import com.google.protobuf.MessageLite;
+import com.google.common.collect.Lists;
 import com.google.protobuf.Parser;
-import com.hazelcast.nio.DataSerializable;
 import io.netty.buffer.ByteBuf;
 import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.exec.expr.TypeHelper;
-import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.proto.UserBitShared;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.server.BootStrapContext;
-import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.vector.BaseDataValueVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.proto.UserBitShared.FieldMetadata;
@@ -38,7 +33,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class VectorWrap implements DataSerializable{
+public class VectorWrap implements DrillSerializable {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(VectorWrap.class);
 
   List<ValueVector> vectorList;
@@ -56,7 +51,7 @@ public class VectorWrap implements DataSerializable{
   }
   
   @Override
-  public void readData(DataInput arg0) throws IOException {
+  public void read(DataInput arg0) throws IOException {
     int size = arg0.readInt();
     for (int i = 0; i < size; i++) {
       int metaLength = arg0.readInt();
@@ -76,7 +71,7 @@ public class VectorWrap implements DataSerializable{
   }
 
   @Override
-  public void writeData(DataOutput arg0) throws IOException {
+  public void write(DataOutput arg0) throws IOException {
     int size = vectorList.size();
     arg0.writeInt(size);
     for (ValueVector vector : vectorList) {

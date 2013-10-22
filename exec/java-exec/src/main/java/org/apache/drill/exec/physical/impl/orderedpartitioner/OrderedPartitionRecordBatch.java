@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.hazelcast.core.AtomicNumber;
 import com.hazelcast.core.IMap;
-import com.hazelcast.core.MultiMap;
 import com.sun.codemodel.JConditional;
 import com.sun.codemodel.JExpr;
 import org.apache.drill.common.config.DrillConfig;
@@ -32,8 +31,7 @@ import org.apache.drill.common.logical.data.NamedExpression;
 import org.apache.drill.common.logical.data.Order;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.common.types.Types;
-import org.apache.drill.exec.cache.HazelCache;
-import org.apache.drill.exec.cache.VectorWrap;
+import org.apache.drill.exec.cache.*;
 import org.apache.drill.exec.compile.sig.MappingSet;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
@@ -68,8 +66,7 @@ public class OrderedPartitionRecordBatch extends AbstractRecordBatch<OrderedPart
   private static int RECORDS_TO_SAMPLE = 5000;
   private static int SAMPLING_FACTOR = 10;
   private static float COMPLETION_FACTOR = .75f;
-  private static String SAMPLE_MAP_NAME = "sampleMap";
-  private static String TABLE_MAP_NAME = "TableMap";
+  private static Class SAMPLE_MAP_NAME = VectorWrap.class;
   protected final RecordBatch incoming;
   private boolean first = true;
   private OrderedPartitionProjector projector;
@@ -129,11 +126,11 @@ public class OrderedPartitionRecordBatch extends AbstractRecordBatch<OrderedPart
 
 //      BatchPrinter.printBatch(containerToCache);
 
-      HazelCache cache = new HazelCache(DrillConfig.create());
-      cache.run();
+//      HazelCache cache = new HazelCache(DrillConfig.create());
+//      cache.run();
+      DistributedCache cache = context.getDrillbitContext().getCache();
       String mapKey = String.format("%s_%d", context.getHandle().getQueryId(), context.getHandle().getMajorFragmentId());
-      MultiMap<String, VectorWrap> mmap = cache.getMultiMap(SAMPLE_MAP_NAME);
-
+      MultiMap<VectorWrap> mmap = cache.getMultiMap(VectorWrap.class);
       List<ValueVector> vectorList = Lists.newArrayList();
       for (VectorWrapper vw : containerToCache) {
         vectorList.add(vw.getValueVector());
@@ -143,7 +140,7 @@ public class OrderedPartitionRecordBatch extends AbstractRecordBatch<OrderedPart
 
       mmap.put(mapKey, wrap);
 
-      AtomicNumber minorFragmentSampleCount = cache.getAtomicNumber(mapKey);
+      Counter minorFragmentSampleCount = cache.getCounter(mapKey);
 
       long val = minorFragmentSampleCount.incrementAndGet();
       logger.debug("Incremented mfsc, got {}", val);
@@ -152,12 +149,12 @@ public class OrderedPartitionRecordBatch extends AbstractRecordBatch<OrderedPart
         Thread.sleep(10);
       }
 
-      Collection<VectorWrap> allSamplesWrap = mmap.get(mapKey);
+      Collection<DrillSerializable> allSamplesWrap = mmap.get(mapKey);
       VectorContainer allSamplesContainer = new VectorContainer();
       int orderSize = popConfig.getOrderings().size();
       SortContainerBuilder containerBuilder = new SortContainerBuilder(context.getAllocator(), MAX_SORT_BYTES, allSamplesContainer, orderSize);
-      for (VectorWrap w : allSamplesWrap) {
-        containerBuilder.add(w.get());
+      for (DrillSerializable w : allSamplesWrap) {
+        containerBuilder.add(((VectorWrap)w).get());
       }
       containerBuilder.build(context);
 
@@ -192,9 +189,9 @@ public class OrderedPartitionRecordBatch extends AbstractRecordBatch<OrderedPart
       }
       wrap = new VectorWrap(vectorList);
 
-      IMap<String, VectorWrap> tableMap = cache.getMap(TABLE_MAP_NAME);
+      Map<VectorWrap> tableMap = cache.getMap(VectorWrap.class);
       tableMap.putIfAbsent(mapKey + "final", wrap, 1, TimeUnit.MINUTES);
-      wrap = tableMap.get(mapKey + "final");
+      wrap = (VectorWrap)tableMap.get(mapKey + "final");
       Preconditions.checkState(wrap != null);
       for (ValueVector vv : wrap.get()) {
         partitionVectors.add(vv);
