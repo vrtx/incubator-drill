@@ -30,12 +30,11 @@ public abstract class MergingReceiverTemplate implements MergingReceiverGenerato
   public MergingReceiverTemplate() throws SchemaChangeException { }
 
   public abstract void doSetup(@Named("context") FragmentContext context,
-                               @Named("incoming") RecordBatchLoader[] incoming,
+                               @Named("incomingBatchLoaders") RecordBatchLoader[] incomingBatchLoaders,
                                @Named("outgoing") RecordBatch outgoing) throws SchemaChangeException;
 
-
-  public abstract int doCompare(@Named("leftBatch") int leftBatch, @Named("leftIndex") int leftIndex,
-                                 @Named("rightBatch") int rightBatch, @Named("rightIndex") int rightIndex);
+  public abstract int doCompare(@Named("left") MergingRecordBatch.Node leftBatch,
+                                @Named("right") MergingRecordBatch.Node leftIndex);
 
   public abstract void doCopy(@Named("inBatch") int inBatch, @Named("inIndex") int inIndex, @Named("outIndex") int outIndex);
 
