@@ -18,19 +18,22 @@
 package org.apache.drill.exec.physical.impl.mergereceiver;
 
 import org.apache.drill.exec.compile.TemplateClassDefinition;
+import org.apache.drill.exec.compile.sig.MappingSet;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.RecordBatchLoader;
 
+import static org.apache.drill.exec.compile.sig.GeneratorMapping.GM;
+
 public interface  MergingReceiverGeneratorBase {
 
   public abstract void doSetup(FragmentContext context,
-                               RecordBatchLoader[] incoming,
+                               RecordBatchLoader[] incomingBatchLoaders,
                                RecordBatch outgoing) throws SchemaChangeException;
 
-  public abstract int doCompare(int leftBatch, int leftIndex,
-                                int rightBatch, int rightIndex);
+  public abstract int doCompare(MergingRecordBatch.Node leftBatch,
+                                MergingRecordBatch.Node leftIndex);
 
   public abstract void doCopy(int inBatch, int inIndex, int outIndex);
 
@@ -38,5 +41,20 @@ public interface  MergingReceiverGeneratorBase {
 
   public static TemplateClassDefinition<MergingReceiverGeneratorBase> TEMPLATE_DEFINITION =
       new TemplateClassDefinition<>(MergingReceiverGeneratorBase.class, MergingReceiverTemplate.class);
+
+  public static final MappingSet SETUP_MAPPING =
+    new MappingSet("null", "null",
+      GM("doSetup", "doSetup", null, null),
+      GM("doSetup", "doSetup", null, null));
+
+  public static final MappingSet COMPARE_MAPPING =
+    new MappingSet("left.valueIndex", "right.valueIndex",
+      GM("doSetup", "doCompare", null, null),
+      GM("doSetup", "doCompare", null, null));
+
+  public static final MappingSet COPY_MAPPING =
+    new MappingSet("inIndex", "outIndex",
+      GM("doSetup", "doCopy", null, null),
+      GM("doSetup", "doCopy", null, null));
 
 }
