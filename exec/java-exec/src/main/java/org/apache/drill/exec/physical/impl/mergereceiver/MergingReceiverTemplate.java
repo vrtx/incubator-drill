@@ -29,13 +29,32 @@ public abstract class MergingReceiverTemplate implements MergingReceiverGenerato
 
   public MergingReceiverTemplate() throws SchemaChangeException { }
 
+  /**
+   * Enter the generated setup routine
+   * @param context current fragment context
+   * @param incomingBatchLoaders one RecordBatchLoader per sender
+   * @param outgoing outgoing RecordBatch iterator
+   * @throws SchemaChangeException
+   */
   public abstract void doSetup(@Named("context") FragmentContext context,
                                @Named("incomingBatchLoaders") RecordBatchLoader[] incomingBatchLoaders,
                                @Named("outgoing") RecordBatch outgoing) throws SchemaChangeException;
 
-  public abstract int doCompare(@Named("left") MergingRecordBatch.Node leftBatch,
-                                @Named("right") MergingRecordBatch.Node leftIndex);
+  /**
+   * Enter the generated comparator
+   * @param left  reference to the left-hand value in an incoming vector
+   * @param right reference to the right-hand value in an incoming vector
+   * @return
+   */
+  public abstract int doCompare(@Named("left") MergingRecordBatch.Node left,
+                                @Named("right") MergingRecordBatch.Node right);
 
+  /**
+   * Enter the generated copy function
+   * @param inBatch incoming batch to copy from
+   * @param inIndex incoming record position to copy from
+   * @param outIndex outgoing record position to copy to
+   */
   public abstract void doCopy(@Named("inBatch") int inBatch, @Named("inIndex") int inIndex, @Named("outIndex") int outIndex);
 
   public abstract void doEval(@Named("inBatch") int inBatch, @Named("inIndex") int inIndex, @Named("outIndex") int outIndex);
