@@ -26,8 +26,8 @@ import org.apache.drill.exec.record.RecordBatchLoader;
 
 import static org.apache.drill.exec.compile.sig.GeneratorMapping.GM;
 
-public interface  MergingReceiverGeneratorBase {
-
+public interface MergingReceiverGeneratorBase {
+  
   public abstract void doSetup(FragmentContext context,
                                RecordBatchLoader[] incomingBatchLoaders,
                                RecordBatch outgoing) throws SchemaChangeException;
@@ -41,11 +41,6 @@ public interface  MergingReceiverGeneratorBase {
 
   public static TemplateClassDefinition<MergingReceiverGeneratorBase> TEMPLATE_DEFINITION =
       new TemplateClassDefinition<>(MergingReceiverGeneratorBase.class, MergingReceiverTemplate.class);
-
-  public static final MappingSet SETUP_MAPPING =
-    new MappingSet("null", "null",
-      GM("doSetup", "doSetup", null, null),
-      GM("doSetup", "doSetup", null, null));
 
   public static final MappingSet COMPARE_MAPPING =
     new MappingSet("left.valueIndex", "right.valueIndex",

@@ -61,6 +61,9 @@ import java.util.List;
 import java.util.PriorityQueue;
 
 
+/**
+ * The MergingRecordBatch merges pre-sorted record batches from remote senders.
+ */
 public class MergingRecordBatch implements RecordBatch {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MergingRecordBatch.class);
 
@@ -95,13 +98,6 @@ public class MergingRecordBatch implements RecordBatch {
     this.batchOffsets = new int[senderCount];
     this.allocators = Lists.newArrayList();
     this.outgoingContainer = new VectorContainer();
-
-    // allocate the priority queue with the generated comparator
-    this.pqueue = new PriorityQueue<Node>(fragProviders.length, new Comparator<Node>() {
-      public int compare(Node node1, Node node2) {
-        return merger.doCompare(node1, node2);
-      }
-    });
 
     // allocate the incoming record batch loaders (loading happens in next())
     this.batchLoaders = new RecordBatchLoader[senderCount];
@@ -175,6 +171,14 @@ public class MergingRecordBatch implements RecordBatch {
         context.fail(e);
         return IterOutcome.STOP;
       }
+
+      // allocate the priority queue with the generated comparator
+      this.pqueue = new PriorityQueue<Node>(fragProviders.length, new Comparator<Node>() {
+        public int compare(Node node1, Node node2) {
+          return merger.doCompare(node1, node2);
+        }
+      });
+
       // populate the priority queue with initial values
       int batchId = 0;
       for (RecordBatchLoader loader : batchLoaders) {
@@ -296,7 +300,7 @@ public class MergingRecordBatch implements RecordBatch {
 
   @Override
   public TypedFieldId getValueVectorId(SchemaPath path) {
-    return outgoingContainer.getValueVector(path);
+    return outgoingContainer.getValueVectorId(path);
   }
   
   @Override
@@ -320,115 +324,141 @@ public class MergingRecordBatch implements RecordBatch {
   }
 
   /**
-   * Generate code for the merger's copy and compare methods.
+   * Creates a generate class which implements the copy and compare methods.
    * 
    * @return instance of a new merger based on generated code
    * @throws SchemaChangeException
    */
   private MergingReceiverGeneratorBase createMerger() throws SchemaChangeException {
 
-    // set up the merger's comparison expression
+    // set up the expression evaluator and code generation
     final LogicalExpression expr = config.getExpression();
     final ErrorCollector collector = new ErrorCollectorImpl();
     final CodeGenerator<MergingReceiverGeneratorBase> cg =
         new CodeGenerator<>(MergingReceiverGeneratorBase.TEMPLATE_DEFINITION, context.getFunctionRegistry());
     cg.setMappingSet(MergingReceiverGeneratorBase.COMPARE_MAPPING);
-
-    // generate evaluation expression for each incoming batch
-    for (RecordBatchLoader batch: batchLoaders) {
-      // TODO: generate an expression holder for each incoming batch
-      CodeGenerator.HoldingContainer exprHolder = cg.addExpr(ExpressionTreeMaterializer.materialize(expr, this, collector));
-      if (collector.hasErrors()) {
-        throw new SchemaChangeException(String.format(
-          "Failure while trying to materialize incoming schema.  Errors:\n %s.",
-          collector.toErrorString()));
-      }
-    }
-
     JExpression inIndex = JExpr.direct("inIndex");
+
     JType valueVector2DArray = cg.getModel().ref(ValueVector.class).array().array();
     JType valueVectorArray = cg.getModel().ref(ValueVector.class).array();
+    JType incomingBatchesType = cg.getModel().ref(RecordBatchLoader.class).array();
+    JType incomingBatchType = cg.getModel().ref(RecordBatchLoader.class);
+    JType recordBatchType = cg.getModel().ref(RecordBatch.class);
 
     // declare a two-dimensional array of value vectors; batch is first dimension, ValueVectorId is the second
     JVar incomingVectors = cg.clazz.field(JMod.NONE,
       valueVector2DArray,
       "incomingVectors");
 
-    JVar keyVectors = cg.clazz.field(JMod.NONE,
-      valueVectorArray,
-      "keyVectors");
+    // declare an array of incoming batches
+    JVar incomingBatchesVar = cg.clazz.field(JMod.NONE,
+      incomingBatchesType,
+      "incomingBatches");
 
+    // declare an array of outgoing vectors
     JVar outgoingVectors = cg.clazz.field(JMod.NONE,
       valueVectorArray,
       "outgoingVectors");
+
+    // declare a reference to this MergingRecordBatch
+    JVar outgoingBatch = cg.clazz.field(JMod.NONE,
+      recordBatchType,
+      "outgoingBatch");
+
+    // create setup aliases for materializer
+    JVar incomingVar = cg.clazz.field(JMod.NONE, incomingBatchType, "incoming");
+    cg.getSetupBlock().assign(incomingBatchesVar, JExpr.direct("incomingBatchLoaders"));
+    cg.getSetupBlock().assign(outgoingBatch, JExpr.direct("outgoing"));
 
     // create 2d array and build initialization list for incoming vectors.  For example:
     //     incomingVectors = new ValueVector[][] {
     //                         new ValueVector[] {vv1, vv2},
     //                         new ValueVector[] {vv3, vv4}
     //                       });
+    int fieldsPerBatch = 0; // number of fields per batch
+    int fieldIdx = 0;
+    int batchIdx = 0;
     JArray incomingVectorInit = JExpr.newArray(cg.getModel().ref(ValueVector.class).array());
-
-    int fieldId = 0;
-    int batchId = 0;
     for (RecordBatchLoader batch : batchLoaders) {
       JArray incomingVectorInitBatch = JExpr.newArray(cg.getModel().ref(ValueVector.class));
       for (VectorWrapper<?> vv : batch) {
         // declare incoming value vector and assign it to the array
-        JVar inVV = cg.declareVectorValueSetupAndMember("incomingVectors[" + batchId + "]",
+        JVar inVV = cg.declareVectorValueSetupAndMember("incomingBatches[" + batchIdx + "]",
           new TypedFieldId(vv.getField().getType(),
-            fieldId,
+            fieldIdx,
             false));
+
         // add vv to initialization list (e.g. { vv1, vv2, vv3 } )
         incomingVectorInitBatch.add(inVV);
-        ++fieldId;
+        ++fieldIdx;
       }
 
       // add VV array to initialization list (e.g. new ValueVector[] { ... })
       incomingVectorInit.add(incomingVectorInitBatch);
-      ++batchId;
-      fieldId = 0;
-    }
 
-    // generate 2d value vector array initialization list for incoming batches.
+      // generate evaluation expression for each incoming batch using 'incoming' as an intermediate reference.
+      cg.getSetupBlock().assign(incomingVar, JExpr.direct("incomingBatches[" + batchIdx + "]"));
+      CodeGenerator.HoldingContainer exprHolder = cg.addExpr(ExpressionTreeMaterializer.materialize(expr, batch, collector));
+      if (collector.hasErrors()) {
+        throw new SchemaChangeException(String.format(
+          "Failure while trying to materialize incoming schema.  Errors:\n %s.",
+          collector.toErrorString()));
+      }
+
+      ++batchIdx;
+      fieldsPerBatch = fieldIdx;
+      fieldIdx = 0;
+    }
     cg.getSetupBlock().assign(incomingVectors, incomingVectorInit);
+
+    // generate comparison function
+    cg.getEvalBlock()._return(JExpr.lit(-1));
+
+    // allocate a new array for outgoing vectors
+    cg.getSetupBlock().assign(outgoingVectors, JExpr.newArray(cg.getModel().ref(ValueVector.class), fieldsPerBatch));
 
     // generate copy function
     cg.setMappingSet(MergingReceiverGeneratorBase.COPY_MAPPING);
     for (VectorWrapper<?> vvOut : outgoingContainer) {
       // declare outgoing value vectors
-      JVar outgoingVV = cg.declareVectorValueSetupAndMember("outgoingVectors[" + fieldId + "]", new TypedFieldId(vvOut.getField().getType(),
-        fieldId,
-        vvOut.isHyper()));
+      JVar outgoingVV = cg.declareVectorValueSetupAndMember("outgoingBatch",
+                                                            new TypedFieldId(vvOut.getField().getType(),
+                                                                             fieldIdx,
+                                                                             vvOut.isHyper()));
 
-      // generate the copyFrom() invocation with explicit cast to the appropriate type
+      // assign to the appropriate slot in the outgoingVector array (in order of iteration)
+      cg.getSetupBlock().assign(outgoingVectors.component(JExpr.lit(fieldIdx)), outgoingVV);
+
+      // get the vector's type info
       Class<?> vvType = TypeHelper.getValueVectorClass(vvOut.getField().getType().getMinorType(),
-        vvOut.getField().getType().getMode());
+                                                       vvOut.getField().getType().getMode());
       JClass vvClass = cg.getModel().ref(vvType);
-      // the following block generates calls to copyFrom(); e.g.:
+
+      // generate the copyFrom() invocation with explicit cast to the appropriate type; for example:
       // ((IntVector) outgoingVectors[i]).copyFrom(inIndex,
-      //                                           outgoingVectors[i].getRecordCount(),
-      //                                           vv1);
+      //                                           outgoingBatch.getRecordCount(),
+      //                                           (IntVector) vv1);
       cg.getEvalBlock().add(
-        ((JExpression) JExpr.cast(vvClass,
-          ((JExpression)
-            outgoingVectors)
-            .component(JExpr.lit(fieldId))))
+        ((JExpression) JExpr.cast(vvClass, outgoingVectors.component(JExpr.lit(fieldIdx))))
           .invoke("copyFrom")
           .arg(inIndex)
-          .arg(((JExpression) outgoingVectors.component(JExpr.lit(fieldId))).invoke("getRecordCount"))
-          .arg(incomingVectors.component(JExpr.lit(fieldId))));
+          .arg(outgoingBatch.invoke("getRecordCount"))
+          .arg(JExpr.cast(vvClass,
+                          ((JExpression) incomingVectors.component(JExpr.direct("inBatch")))
+                            .component(JExpr.lit(fieldIdx)))));
 
-      ++fieldId;
+      ++fieldIdx;
     }
+
+    MergingReceiverGeneratorBase newMerger;
     try {
-      // compile and setup generated code
-      MergingReceiverGeneratorBase merger = context.getImplementationClass(cg);
-      merger.doSetup(context, batchLoaders, this);
+      // compile generated code and enter generated setup routine
+      newMerger = context.getImplementationClass(cg);
+      newMerger.doSetup(context, batchLoaders, this);
     } catch (ClassTransformationException | IOException e) {
       throw new SchemaChangeException("Failure while attempting to load generated class", e);
     }
-    return merger;
+    return newMerger;
   }
 
   /**
