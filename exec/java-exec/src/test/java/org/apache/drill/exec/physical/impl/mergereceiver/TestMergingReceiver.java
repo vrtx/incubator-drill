@@ -60,6 +60,7 @@ public class TestMergingReceiver extends PopUnitTestBase {
           Charsets.UTF_8));
       int count = 0;
       RecordBatchLoader batchLoader = new RecordBatchLoader(client.getAllocator());
+      // print the results
       for(QueryResultBatch b : results) {
         count += b.getHeader().getRowCount();
         for (int valueIdx = 0; valueIdx < b.getHeader().getRowCount(); valueIdx++) {

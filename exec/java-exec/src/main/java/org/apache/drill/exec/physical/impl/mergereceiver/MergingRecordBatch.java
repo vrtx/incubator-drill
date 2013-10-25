@@ -115,18 +115,19 @@ public class MergingRecordBatch implements RecordBatch {
     boolean schemaChanged = false;
 
     if (prevBatchWasFull) {
-      logger.debug("prevBatchWasFull: Outgoing vectors were full on last iteration; resetting.");
+      logger.debug("Outgoing vectors were full on last iteration");
       allocateOutgoing();
       outgoingPosition = 0;
       prevBatchWasFull = false;
     }
 
     if (hasMoreIncoming == false) {
-      logger.debug("hasMoreIncoming: next() was called while no more incoming buffers.");
+      logger.debug("next() was called after all values have been processed");
       outgoingPosition = 0;
       return IterOutcome.NONE;
     }
 
+    // lazy initialization
     if (!hasRun) {
       schemaChanged = true; // first iteration is always a schema change
       
@@ -134,7 +135,6 @@ public class MergingRecordBatch implements RecordBatch {
       int batchCount = 0;
       for (RawFragmentBatchProvider provider : fragProviders) {
         incomingBatches[batchCount] = provider.getNext();
-        logger.debug("Adding fragment provider to MergingRecordBatch with id {}", batchCount);
         ++batchCount;
       }
 
@@ -170,16 +170,17 @@ public class MergingRecordBatch implements RecordBatch {
         outgoingContainer.add(outgoingVector);
         ++vectorCount;
       }
-      logger.debug("Allocating {} vectors with {} values", vectorCount, DEFAULT_ALLOC_RECORD_COUNT);
-      BatchSchema batchSchema = bldr.build();
-      if (batchSchema != null && !batchSchema.equals(schema)) {
-        // TODO: handle case where one or more batches indicate schema change
+
+      logger.debug("Allocating {} outgoing vectors with {} values", vectorCount, DEFAULT_ALLOC_RECORD_COUNT);
+
+      schema = bldr.build();
+      if (schema != null && !schema.equals(schema)) {
+        // TODO: handle case where one or more batches implicitly indicate schema change
         logger.debug("Initial state has incoming batches with different schemas");
       }
-      schema = batchSchema;
       outgoingContainer.buildSchema(BatchSchema.SelectionVectorMode.NONE);
 
-      // generate code for copy and compare
+      // generate code for merge operations (copy and compare)
       try {
         merger = createMerger();
       } catch (SchemaChangeException e) {
@@ -196,20 +197,18 @@ public class MergingRecordBatch implements RecordBatch {
       });
 
       // populate the priority queue with initial values
-      int batchId = 0;
-      for (RecordBatchLoader loader : batchLoaders) {
-        Node value = new Node(batchId, 0);
-        pqueue.add(value);
-        ++batchId;
-      }
+      for (int b = 0; b < batchCount; ++b)
+        pqueue.add(new Node(b, 0));
 
       hasRun = true;
+      // finished lazy initialization
     }
 
     while (!pqueue.isEmpty()) {
       // pop next value from pq and copy to outgoing batch
       Node node = pqueue.peek();
       copyRecordToOutgoingBatch(pqueue.poll());
+
       if (isOutgoingFull()) {
         // set a flag so that we reallocate on the next iteration
         logger.debug("Outgoing vectors are full; breaking");
@@ -226,7 +225,7 @@ public class MergingRecordBatch implements RecordBatch {
           boolean allBatchesEmpty = true;
 
           for (RawFragmentBatch batch : incomingBatches) {
-            // see if all batches are empty (time to return IterOutcome.NONE)
+            // see if all batches are empty so we can return OK_* or NONE
             if (!batch.getHeader().getIsLastBatch()) {
               allBatchesEmpty = false;
               break;
@@ -382,7 +381,7 @@ public class MergingRecordBatch implements RecordBatch {
       recordBatchType,
       "outgoingBatch");
 
-    // create setup aliases for materializer
+    // create aliases for materializer
     JVar incomingVar = cg.clazz.field(JMod.NONE, incomingBatchType, "incoming");
     cg.getSetupBlock().assign(incomingBatchesVar, JExpr.direct("incomingBatchLoaders"));
     cg.getSetupBlock().assign(outgoingBatch, JExpr.direct("outgoing"));
@@ -424,17 +423,23 @@ public class MergingRecordBatch implements RecordBatch {
       }
 
       // add materialized field expression to comparison list
-      if (exprForCurrentBatch instanceof ValueVectorReadExpression) {
+      // TODO: Probably need to handle an expression with a relationship (e.g. '<' or '>')
+      if (exprForCurrentBatch instanceof ValueVectorReadExpression)
         cmpExpressions.add((ValueVectorReadExpression) exprForCurrentBatch);
-      }
+      else
+        throw new SchemaChangeException("Invalid expression supplied to MergingReceiver operator");
 
       ++batchIdx;
       fieldsPerBatch = fieldIdx;
       fieldIdx = 0;
     }
+
+    // write out the incoming vector initialization
     cg.getSetupBlock().assign(incomingVectors, incomingVectorInit);
 
-    // generate comparison function
+    ///////////////////////////////////
+    // Generate the comparison function
+    ///////////////////////////////////
     cg.setMappingSet(MergingReceiverGeneratorBase.COMPARE_MAPPING);
 
     // initialize the array of comparison vectors
@@ -455,7 +460,7 @@ public class MergingRecordBatch implements RecordBatch {
 
     JType vectorType = cg.getModel()._ref(TypeHelper.getValueVectorClass(cmpType.getMinorType(),
                                                                          cmpType.getMode()));
-    // generate optional/required comparison code
+    // generate comparison code for nullable/optional vectors
     if (cmpType.getMode() == TypeProtos.DataMode.OPTIONAL) {
       // handle null == null
       cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
@@ -490,6 +495,7 @@ public class MergingRecordBatch implements RecordBatch {
         ._return(JExpr.lit(1));
     }
 
+    // generate comparison code
     // equality
     cg.getEvalBlock()._if(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))))
                           .invoke("getAccessor")
@@ -516,6 +522,10 @@ public class MergingRecordBatch implements RecordBatch {
 
     // greater than
     cg.getEvalBlock()._return(JExpr.lit(1));
+
+    /////////////////////////////////////
+    // End comparison function generation
+    /////////////////////////////////////
 
     // allocate a new array for outgoing vectors
     cg.getSetupBlock().assign(outgoingVectors, JExpr.newArray(cg.getModel().ref(ValueVector.class), fieldsPerBatch));
@@ -553,9 +563,9 @@ public class MergingRecordBatch implements RecordBatch {
       ++fieldIdx;
     }
 
+    // compile generated code and call the generated setup method
     MergingReceiverGeneratorBase newMerger;
     try {
-      // compile generated code and enter generated setup routine
       newMerger = context.getImplementationClass(cg);
       newMerger.doSetup(context, batchLoaders, this);
     } catch (ClassTransformationException | IOException e) {
@@ -571,7 +581,6 @@ public class MergingRecordBatch implements RecordBatch {
    * @param node Reference to the next record to copy from the incoming batches
    */
   private void copyRecordToOutgoingBatch(Node node) {
-    System.out.println(" + Copying value.  batch: [" + node.batchId + "], rowIndex: [" + node.valueIndex + "], outgoingPos: " + outgoingPosition);
     merger.doCopy(node.batchId, node.valueIndex, outgoingPosition++);
   }
 
