@@ -210,7 +210,7 @@ public class MergingRecordBatch implements RecordBatch {
         break;
       }
 
-      if (node.valueIndex == batchLoaders[node.batchId].getRecordCount()) {
+      if (node.valueIndex == batchLoaders[node.batchId].getRecordCount() - 1) {
         // reached the end of an incoming record batch
         incomingBatches[node.batchId] = fragProviders[node.batchId].getNext();
 
