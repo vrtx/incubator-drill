@@ -20,13 +20,18 @@ package org.apache.drill.exec.physical.impl.mergereceiver;
 
 import java.util.List;
 
+import com.beust.jcommander.internal.Lists;
 import org.apache.drill.common.util.FileUtils;
+import org.apache.drill.exec.cache.VectorWrap;
 import org.apache.drill.exec.client.DrillClient;
 import org.apache.drill.exec.pop.PopUnitTestBase;
 import org.apache.drill.exec.proto.UserProtos;
+import org.apache.drill.exec.record.RecordBatchLoader;
+import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.rpc.user.QueryResultBatch;
 import org.apache.drill.exec.server.Drillbit;
 import org.apache.drill.exec.server.RemoteServiceSet;
+import org.apache.drill.exec.vector.ValueVector;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -54,13 +59,27 @@ public class TestMergingReceiver extends PopUnitTestBase {
         Files.toString(FileUtils.getResourceAsFile("/mergerecv/merging_receiver.json"),
           Charsets.UTF_8));
       int count = 0;
-      int batchCount = 0;
+      RecordBatchLoader batchLoader = new RecordBatchLoader(client.getAllocator());
       for(QueryResultBatch b : results) {
-        if (b.getHeader().getRowCount() != 0)
-          count += b.getHeader().getRowCount();
-        batchCount++;
+        count += b.getHeader().getRowCount();
+        for (int valueIdx = 0; valueIdx < b.getHeader().getRowCount(); valueIdx++) {
+          List<Object> row = Lists.newArrayList();
+          batchLoader.load(b.getHeader().getDef(), b.getData());
+          for (VectorWrapper vw : batchLoader)
+            row.add(vw.getValueVector().getField().getName() + ":" + vw.getValueVector().getAccessor().getObject(valueIdx));
+          for (Object cell : row) {
+            if (cell == null) {
+              System.out.print("<null>    ");
+              continue;
+            }
+            int len = cell.toString().length();
+            System.out.print(cell + " ");
+            for (int i = 0; i < (30 - len); ++i)
+              System.out.print(" ");
+          }
+          System.out.println();
+        }
       }
-      System.out.println("Batch Count: " + batchCount);
       assertEquals(200, count);
     }
   }
