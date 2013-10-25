@@ -76,7 +76,8 @@ public class MergingRecordBatch implements RecordBatch {
   private VectorContainer outgoingContainer;
   private MergingReceiverGeneratorBase merger;
   private boolean hasRun = false;
-  private boolean lastBatchWasFull = false;
+  private boolean prevBatchWasFull = false;
+  private boolean hasMoreIncoming = true;
   private final int DEFAULT_ALLOC_RECORD_COUNT = 20000;
 
   private int outgoingPosition = 0;
@@ -112,6 +113,19 @@ public class MergingRecordBatch implements RecordBatch {
   public IterOutcome next() {
     if (fragProviders.length == 0) return IterOutcome.NONE;
     boolean schemaChanged = false;
+
+    if (prevBatchWasFull) {
+      logger.debug("prevBatchWasFull: Outgoing vectors were full on last iteration; resetting.");
+      allocateOutgoing();
+      outgoingPosition = 0;
+      prevBatchWasFull = false;
+    }
+
+    if (hasMoreIncoming == false) {
+      logger.debug("hasMoreIncoming: next() was called while no more incoming buffers.");
+      outgoingPosition = 0;
+      return IterOutcome.NONE;
+    }
 
     if (!hasRun) {
       schemaChanged = true; // first iteration is always a schema change
@@ -163,6 +177,7 @@ public class MergingRecordBatch implements RecordBatch {
         logger.debug("Initial state has incoming batches with different schemas");
       }
       schema = batchSchema;
+      outgoingContainer.buildSchema(BatchSchema.SelectionVectorMode.NONE);
 
       // generate code for copy and compare
       try {
@@ -191,23 +206,14 @@ public class MergingRecordBatch implements RecordBatch {
       hasRun = true;
     }
 
-    if (lastBatchWasFull) {
-      logger.debug("Outgoing vectors were full on last iteration; resetting.");
-      allocateOutgoing();
-      outgoingPosition = 0;
-      lastBatchWasFull = false;
-    }
-
     while (!pqueue.isEmpty()) {
       // pop next value from pq and copy to outgoing batch
       Node node = pqueue.peek();
       copyRecordToOutgoingBatch(pqueue.poll());
-      System.out.println("Looping.  Next entry: " + node.batchId + ": " + node.valueIndex);
       if (isOutgoingFull()) {
         // set a flag so that we reallocate on the next iteration
         logger.debug("Outgoing vectors are full; breaking");
-        lastBatchWasFull = true;
-        break;
+        prevBatchWasFull = true;
       }
 
       if (node.valueIndex == batchLoaders[node.batchId].getRecordCount() - 1) {
@@ -227,8 +233,10 @@ public class MergingRecordBatch implements RecordBatch {
             }
           }
 
-          if (allBatchesEmpty)
-            return IterOutcome.NONE;
+          if (allBatchesEmpty) {
+            hasMoreIncoming = false;
+            break;
+          }
 
           // this batch is empty; since the pqueue no longer references this batch, it will be
           // ignored in subsequent iterations.
@@ -252,7 +260,13 @@ public class MergingRecordBatch implements RecordBatch {
       } else {
         pqueue.add(new Node(node.batchId, node.valueIndex + 1));
       }
+
+      if (prevBatchWasFull) break;
     }
+
+    // set the value counts in the outgoing vectors
+    for (VectorWrapper vw : outgoingContainer)
+      vw.getValueVector().getMutator().setValueCount(outgoingPosition);
 
     if (schemaChanged)
       return IterOutcome.OK_NEW_SCHEMA;
@@ -272,9 +286,7 @@ public class MergingRecordBatch implements RecordBatch {
 
   @Override
   public int getRecordCount() {
-    if (!outgoingContainer.iterator().hasNext())
-      return 0;
-    return outgoingContainer.iterator().next().getValueVector().getAccessor().getValueCount();
+    return outgoingPosition;
   }
 
   @Override
@@ -321,7 +333,7 @@ public class MergingRecordBatch implements RecordBatch {
   }
 
   private boolean isOutgoingFull() {
-    return outgoingPosition == getRecordCount();
+    return outgoingPosition == DEFAULT_ALLOC_RECORD_COUNT;
   }
 
   /**
@@ -431,12 +443,12 @@ public class MergingRecordBatch implements RecordBatch {
     TypeProtos.MajorType cmpType = null; // assumes all comparison fields are the same type
     for (ValueVectorReadExpression vvRead : cmpExpressions) {
       cg.getSetupBlock().assign(comparisonVectors.component(JExpr.lit(exprIdx)),
-          ((JExpression) incomingBatchesVar.component(JExpr.lit(exprIdx)))
-              .invoke("getValueAccessorById")
-                  .arg(JExpr.lit(vvRead.getFieldId().getFieldId()))
-                  .arg(cg.getModel()._ref(TypeHelper.getValueVectorClass(vvRead.getMajorType().getMinorType(),
-                                                                         vvRead.getMajorType().getMode())).boxify().dotclass())
-                  .invoke("getValueVector"));
+                                 ((JExpression) incomingBatchesVar.component(JExpr.lit(exprIdx)))
+                                   .invoke("getValueAccessorById")
+                                   .arg(JExpr.lit(vvRead.getFieldId().getFieldId()))
+                                   .arg(cg.getModel()._ref(TypeHelper.getValueVectorClass(vvRead.getMajorType().getMinorType(),
+                                                                                           vvRead.getMajorType().getMode())).boxify().dotclass())
+                                   .invoke("getValueVector"));
       cmpType = vvRead.getMajorType();
       ++exprIdx;
     }
@@ -484,9 +496,9 @@ public class MergingRecordBatch implements RecordBatch {
                           .invoke("get")
                             .arg(JExpr.direct("left.valueIndex"))
                         .eq(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))))
-                          .invoke("getAccessor")
-                          .invoke("get")
-                            .arg(JExpr.direct("right.valueIndex"))))
+                              .invoke("getAccessor")
+                              .invoke("get")
+                              .arg(JExpr.direct("right.valueIndex"))))
         ._then()
         ._return(JExpr.lit(0));
 
@@ -496,9 +508,9 @@ public class MergingRecordBatch implements RecordBatch {
                           .invoke("get")
                             .arg(JExpr.direct("left.valueIndex"))
                         .lt(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))))
-                          .invoke("getAccessor")
-                          .invoke("get")
-                            .arg(JExpr.direct("right.valueIndex"))))
+                              .invoke("getAccessor")
+                              .invoke("get")
+                              .arg(JExpr.direct("right.valueIndex"))))
         ._then()
         ._return(JExpr.lit(-1));
 
@@ -559,7 +571,7 @@ public class MergingRecordBatch implements RecordBatch {
    * @param node Reference to the next record to copy from the incoming batches
    */
   private void copyRecordToOutgoingBatch(Node node) {
-    System.out.println(" + Copying value.  batch: [" + node.batchId + "], rowIndex: [" + node.valueIndex + "]");
+    System.out.println(" + Copying value.  batch: [" + node.batchId + "], rowIndex: [" + node.valueIndex + "], outgoingPos: " + outgoingPosition);
     merger.doCopy(node.batchId, node.valueIndex, outgoingPosition++);
   }
 
