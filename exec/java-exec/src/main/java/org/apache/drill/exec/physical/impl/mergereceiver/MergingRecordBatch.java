@@ -30,11 +30,13 @@ import org.apache.drill.common.expression.ErrorCollector;
 import org.apache.drill.common.expression.ErrorCollectorImpl;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.CodeGenerator;
 import org.apache.drill.exec.expr.ExpressionTreeMaterializer;
 import org.apache.drill.exec.expr.TypeHelper;
+import org.apache.drill.exec.expr.ValueVectorReadExpression;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.MergingReceiverPOP;
 import org.apache.drill.exec.proto.UserBitShared;
@@ -140,7 +142,6 @@ public class MergingRecordBatch implements RecordBatch {
 
       // create the outgoing schema and vector container, and allocate the initial batch
       SchemaBuilder bldr = BatchSchema.newBuilder().setSelectionVectorMode(BatchSchema.SelectionVectorMode.NONE);
-      int recordCapacity = batchLoaders[0].getRecordCount();
       int vectorCount = 0;
       for (VectorWrapper<?> v : batchLoaders[0]) {
 
@@ -150,12 +151,12 @@ public class MergingRecordBatch implements RecordBatch {
         // allocate a new value vector
         ValueVector outgoingVector = TypeHelper.getNewVector(v.getField(), context.getAllocator());
         VectorAllocator allocator = VectorAllocator.getAllocator(v.getValueVector(), outgoingVector);
-        allocator.alloc(recordCapacity);
+        allocator.alloc(DEFAULT_ALLOC_RECORD_COUNT);
         allocators.add(allocator);
         outgoingContainer.add(outgoingVector);
         ++vectorCount;
       }
-      logger.debug("Allocating {} vectors with {} values", vectorCount, recordCapacity);
+      logger.debug("Allocating {} vectors with {} values", vectorCount, DEFAULT_ALLOC_RECORD_COUNT);
       BatchSchema batchSchema = bldr.build();
       if (batchSchema != null && !batchSchema.equals(schema)) {
         // TODO: handle case where one or more batches indicate schema change
@@ -201,7 +202,7 @@ public class MergingRecordBatch implements RecordBatch {
       // pop next value from pq and copy to outgoing batch
       Node node = pqueue.peek();
       copyRecordToOutgoingBatch(pqueue.poll());
-
+      System.out.println("Looping.  Next entry: " + node.batchId + ": " + node.valueIndex);
       if (isOutgoingFull()) {
         // set a flag so that we reallocate on the next iteration
         logger.debug("Outgoing vectors are full; breaking");
@@ -236,11 +237,11 @@ public class MergingRecordBatch implements RecordBatch {
 
         UserBitShared.RecordBatchDef rbd = incomingBatches[node.batchId].getHeader().getDef();
         try {
-            batchLoaders[node.batchId].load(rbd, incomingBatches[node.batchId].getBody());
-          } catch(SchemaChangeException ex) {
-            context.fail(ex);
-            return IterOutcome.STOP;
-          }
+          batchLoaders[node.batchId].load(rbd, incomingBatches[node.batchId].getBody());
+        } catch(SchemaChangeException ex) {
+          context.fail(ex);
+          return IterOutcome.STOP;
+        }
         incomingBatches[node.batchId].release();
         batchOffsets[node.batchId] = 0;
 
@@ -336,7 +337,6 @@ public class MergingRecordBatch implements RecordBatch {
     final ErrorCollector collector = new ErrorCollectorImpl();
     final CodeGenerator<MergingReceiverGeneratorBase> cg =
         new CodeGenerator<>(MergingReceiverGeneratorBase.TEMPLATE_DEFINITION, context.getFunctionRegistry());
-    cg.setMappingSet(MergingReceiverGeneratorBase.COMPARE_MAPPING);
     JExpression inIndex = JExpr.direct("inIndex");
 
     JType valueVector2DArray = cg.getModel().ref(ValueVector.class).array().array();
@@ -349,6 +349,11 @@ public class MergingRecordBatch implements RecordBatch {
     JVar incomingVectors = cg.clazz.field(JMod.NONE,
       valueVector2DArray,
       "incomingVectors");
+
+    // declare an array of vectors (one per batch) used for comparison
+    JVar comparisonVectors = cg.clazz.field(JMod.NONE,
+      valueVectorArray,
+      "comparisonVectors");
 
     // declare an array of incoming batches
     JVar incomingBatchesVar = cg.clazz.field(JMod.NONE,
@@ -370,7 +375,7 @@ public class MergingRecordBatch implements RecordBatch {
     cg.getSetupBlock().assign(incomingBatchesVar, JExpr.direct("incomingBatchLoaders"));
     cg.getSetupBlock().assign(outgoingBatch, JExpr.direct("outgoing"));
 
-    // create 2d array and build initialization list for incoming vectors.  For example:
+    // evaluate expression on each incoming batch and create/initialize 2d array of incoming vectors.  For example:
     //     incomingVectors = new ValueVector[][] {
     //                         new ValueVector[] {vv1, vv2},
     //                         new ValueVector[] {vv3, vv4}
@@ -379,6 +384,7 @@ public class MergingRecordBatch implements RecordBatch {
     int fieldIdx = 0;
     int batchIdx = 0;
     JArray incomingVectorInit = JExpr.newArray(cg.getModel().ref(ValueVector.class).array());
+    List <ValueVectorReadExpression> cmpExpressions = Lists.newArrayList();
     for (RecordBatchLoader batch : batchLoaders) {
       JArray incomingVectorInitBatch = JExpr.newArray(cg.getModel().ref(ValueVector.class));
       for (VectorWrapper<?> vv : batch) {
@@ -396,13 +402,18 @@ public class MergingRecordBatch implements RecordBatch {
       // add VV array to initialization list (e.g. new ValueVector[] { ... })
       incomingVectorInit.add(incomingVectorInitBatch);
 
-      // generate evaluation expression for each incoming batch using 'incoming' as an intermediate reference.
+      // materialize expression for this incoming batch
       cg.getSetupBlock().assign(incomingVar, JExpr.direct("incomingBatches[" + batchIdx + "]"));
-      CodeGenerator.HoldingContainer exprHolder = cg.addExpr(ExpressionTreeMaterializer.materialize(expr, batch, collector));
+      LogicalExpression exprForCurrentBatch = ExpressionTreeMaterializer.materialize(expr, batch, collector);
       if (collector.hasErrors()) {
         throw new SchemaChangeException(String.format(
           "Failure while trying to materialize incoming schema.  Errors:\n %s.",
           collector.toErrorString()));
+      }
+
+      // add materialized field expression to comparison list
+      if (exprForCurrentBatch instanceof ValueVectorReadExpression) {
+        cmpExpressions.add((ValueVectorReadExpression) exprForCurrentBatch);
       }
 
       ++batchIdx;
@@ -412,12 +423,92 @@ public class MergingRecordBatch implements RecordBatch {
     cg.getSetupBlock().assign(incomingVectors, incomingVectorInit);
 
     // generate comparison function
-    cg.getEvalBlock()._return(JExpr.lit(-1));
+    cg.setMappingSet(MergingReceiverGeneratorBase.COMPARE_MAPPING);
+
+    // initialize the array of comparison vectors
+    cg.getSetupBlock().assign(comparisonVectors, JExpr.newArray(cg.getModel().ref(ValueVector.class), fieldsPerBatch));
+    int exprIdx = 0;
+    TypeProtos.MajorType cmpType = null; // assumes all comparison fields are the same type
+    for (ValueVectorReadExpression vvRead : cmpExpressions) {
+      cg.getSetupBlock().assign(comparisonVectors.component(JExpr.lit(exprIdx)),
+          ((JExpression) incomingBatchesVar.component(JExpr.lit(exprIdx)))
+              .invoke("getValueAccessorById")
+                  .arg(JExpr.lit(vvRead.getFieldId().getFieldId()))
+                  .arg(cg.getModel()._ref(TypeHelper.getValueVectorClass(vvRead.getMajorType().getMinorType(),
+                                                                         vvRead.getMajorType().getMode())).boxify().dotclass())
+                  .invoke("getValueVector"));
+      cmpType = vvRead.getMajorType();
+      ++exprIdx;
+    }
+
+    JType vectorType = cg.getModel()._ref(TypeHelper.getValueVectorClass(cmpType.getMinorType(),
+                                                                         cmpType.getMode()));
+    // generate optional/required comparison code
+    if (cmpType.getMode() == TypeProtos.DataMode.OPTIONAL) {
+      // handle null == null
+      cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
+                              .invoke("getAccessor")
+                              .invoke("isSet")
+                                .arg(JExpr.direct("left.valueIndex"))
+                              .eq(JExpr.lit(0))
+                        .cand(((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
+                              .invoke("getAccessor")
+                              .invoke("isSet")
+                                .arg(JExpr.direct("right.valueIndex"))
+                              .eq(JExpr.lit(0))))
+        ._then()
+        ._return(JExpr.lit(0));
+
+      // handle  null == !null
+      cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
+                              .invoke("getAccessor")
+                              .invoke("isSet")
+                                .arg(JExpr.direct("left.valueIndex"))
+                              .eq(JExpr.lit(0)))
+        ._then()
+        ._return(JExpr.lit(-1));
+
+      // handle  !null == null
+      cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
+                              .invoke("getAccessor")
+                              .invoke("isSet")
+                                .arg(JExpr.direct("right.valueIndex"))
+                              .eq(JExpr.lit(0)))
+        ._then()
+        ._return(JExpr.lit(1));
+    }
+
+    // equality
+    cg.getEvalBlock()._if(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))))
+                          .invoke("getAccessor")
+                          .invoke("get")
+                            .arg(JExpr.direct("left.valueIndex"))
+                        .eq(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))))
+                          .invoke("getAccessor")
+                          .invoke("get")
+                            .arg(JExpr.direct("right.valueIndex"))))
+        ._then()
+        ._return(JExpr.lit(0));
+
+    // less than
+    cg.getEvalBlock()._if(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))))
+                          .invoke("getAccessor")
+                          .invoke("get")
+                            .arg(JExpr.direct("left.valueIndex"))
+                        .lt(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))))
+                          .invoke("getAccessor")
+                          .invoke("get")
+                            .arg(JExpr.direct("right.valueIndex"))))
+        ._then()
+        ._return(JExpr.lit(-1));
+
+    // greater than
+    cg.getEvalBlock()._return(JExpr.lit(1));
 
     // allocate a new array for outgoing vectors
     cg.getSetupBlock().assign(outgoingVectors, JExpr.newArray(cg.getModel().ref(ValueVector.class), fieldsPerBatch));
 
-    // generate copy function
+    // generate copy function and setup outgoing batches
     cg.setMappingSet(MergingReceiverGeneratorBase.COPY_MAPPING);
     for (VectorWrapper<?> vvOut : outgoingContainer) {
       // declare outgoing value vectors
