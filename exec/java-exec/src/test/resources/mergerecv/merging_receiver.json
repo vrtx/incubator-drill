@@ -28,7 +28,7 @@
       @id: 2,
       child: 1,
       pop: "sort",
-      orderings: [ {expr: "blue"} ]
+      orderings: [ {expr: "blue", order:"DESC"},  {expr: "red", order:"DESC"} ]
     },
     {
       @id: 3,
@@ -39,7 +39,7 @@
       @id: 4,
       child: 3,
       pop: "single-merge-exchange",
-      expr: "blue"
+      orderings: [ {expr: "blue", order:"DESC"},  {expr: "red", order:"DESC"}  ]
     },
     {
       @id: 5,
