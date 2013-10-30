@@ -21,6 +21,7 @@ package org.apache.drill.exec.physical.config;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import org.apache.drill.common.defs.OrderDef;
 import org.apache.drill.common.exceptions.PhysicalOperatorSetupException;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.exec.physical.base.AbstractExchange;
@@ -35,7 +36,7 @@ import java.util.List;
 public class SingleMergeExchange extends AbstractExchange {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(SingleMergeExchange.class);
 
-  private final LogicalExpression expr;
+  private final List<OrderDef> orderExpr;
 
   // ephemeral for setup tasks
   private List<CoordinationProtos.DrillbitEndpoint> senderLocations;
@@ -43,9 +44,9 @@ public class SingleMergeExchange extends AbstractExchange {
 
   @JsonCreator
   public SingleMergeExchange(@JsonProperty("child") PhysicalOperator child,
-                              @JsonProperty("expr") LogicalExpression expr) {
+                             @JsonProperty("orderings") List<OrderDef> orderExpr) {
     super(child);
-    this.expr = expr;
+    this.orderExpr = orderExpr;
   }
 
   @Override
@@ -75,12 +76,12 @@ public class SingleMergeExchange extends AbstractExchange {
 
   @Override
   public Receiver getReceiver(int minorFragmentId) {
-    return new MergingReceiverPOP(senderMajorFragmentId, senderLocations, expr);
+    return new MergingReceiverPOP(senderMajorFragmentId, senderLocations, orderExpr);
   }
 
   @Override
   protected PhysicalOperator getNewWithChild(PhysicalOperator child) {
-    return new SingleMergeExchange(child, expr);
+    return new SingleMergeExchange(child, orderExpr);
   }
 
   @Override

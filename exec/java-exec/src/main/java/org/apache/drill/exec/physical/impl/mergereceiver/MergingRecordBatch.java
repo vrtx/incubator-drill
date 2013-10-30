@@ -26,10 +26,12 @@ import com.sun.codemodel.JExpression;
 import com.sun.codemodel.JMod;
 import com.sun.codemodel.JType;
 import com.sun.codemodel.JVar;
+import org.apache.drill.common.defs.OrderDef;
 import org.apache.drill.common.expression.ErrorCollector;
 import org.apache.drill.common.expression.ErrorCollectorImpl;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.common.logical.data.Order;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
@@ -57,6 +59,7 @@ import org.apache.drill.exec.vector.allocator.VectorAllocator;
 
 import java.io.IOException;
 import java.lang.Class;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -344,7 +347,7 @@ public class MergingRecordBatch implements RecordBatch {
   private MergingReceiverGeneratorBase createMerger() throws SchemaChangeException {
 
     // set up the expression evaluator and code generation
-    final LogicalExpression expr = config.getExpression();
+    final List<OrderDef> orderings = config.getOrderings();
     final ErrorCollector collector = new ErrorCollectorImpl();
     final CodeGenerator<MergingReceiverGeneratorBase> cg =
         new CodeGenerator<>(MergingReceiverGeneratorBase.TEMPLATE_DEFINITION, context.getFunctionRegistry());
@@ -361,9 +364,11 @@ public class MergingRecordBatch implements RecordBatch {
       valueVector2DArray,
       "incomingVectors");
 
-    // declare an array of vectors (one per batch) used for comparison
+    // declare a two-dimensional array of vectors used to store a reference to all ValueVectors
+    // used in a comparison operation.  first dimension is the batch id.  each batch has one or more
+    // comparison vectors, maintaining the order defined by the OrderDef.
     JVar comparisonVectors = cg.clazz.field(JMod.NONE,
-      valueVectorArray,
+      valueVector2DArray,
       "comparisonVectors");
 
     // declare an array of incoming batches
@@ -386,18 +391,20 @@ public class MergingRecordBatch implements RecordBatch {
     cg.getSetupBlock().assign(incomingBatchesVar, JExpr.direct("incomingBatchLoaders"));
     cg.getSetupBlock().assign(outgoingBatch, JExpr.direct("outgoing"));
 
+    cg.setMappingSet(MergingReceiverGeneratorBase.COMPARE_MAPPING);
+
     // evaluate expression on each incoming batch and create/initialize 2d array of incoming vectors.  For example:
     //     incomingVectors = new ValueVector[][] {
     //                         new ValueVector[] {vv1, vv2},
     //                         new ValueVector[] {vv3, vv4}
     //                       });
     int fieldsPerBatch = 0; // number of fields per batch
-    int fieldIdx = 0;
     int batchIdx = 0;
     JArray incomingVectorInit = JExpr.newArray(cg.getModel().ref(ValueVector.class).array());
-    List <ValueVectorReadExpression> cmpExpressions = Lists.newArrayList();
+    List <List<ValueVectorReadExpression>> cmpExpressions = Lists.newArrayList();
     for (RecordBatchLoader batch : batchLoaders) {
       JArray incomingVectorInitBatch = JExpr.newArray(cg.getModel().ref(ValueVector.class));
+      int fieldIdx = 0;
       for (VectorWrapper<?> vv : batch) {
         // declare incoming value vector and assign it to the array
         JVar inVV = cg.declareVectorValueSetupAndMember("incomingBatches[" + batchIdx + "]",
@@ -413,115 +420,178 @@ public class MergingRecordBatch implements RecordBatch {
       // add VV array to initialization list (e.g. new ValueVector[] { ... })
       incomingVectorInit.add(incomingVectorInitBatch);
 
-      // materialize expression for this incoming batch
-      cg.getSetupBlock().assign(incomingVar, JExpr.direct("incomingBatches[" + batchIdx + "]"));
-      LogicalExpression exprForCurrentBatch = ExpressionTreeMaterializer.materialize(expr, batch, collector);
-      if (collector.hasErrors()) {
-        throw new SchemaChangeException(String.format(
-          "Failure while trying to materialize incoming schema.  Errors:\n %s.",
-          collector.toErrorString()));
-      }
+      // materialize each expression for this incoming batch
+      for (int i = 0; i < orderings.size(); ++i) {
+        cmpExpressions.add(new ArrayList<ValueVectorReadExpression>());
+        cg.getSetupBlock().assign(incomingVar, JExpr.direct("incomingBatches[" + batchIdx + "]"));
+        LogicalExpression exprForCurrentBatch = ExpressionTreeMaterializer.materialize(orderings.get(i).getExpr(),
+                                                                                       batch,
+                                                                                       collector);
+        if (collector.hasErrors()) {
+          throw new SchemaChangeException(
+              String.format("Failure while trying to materialize incoming schema.  Errors:\n %s.",
+                            collector.toErrorString()));
+        }
 
-      // add materialized field expression to comparison list
-      // TODO: Probably need to handle an expression with a relationship (e.g. '<' or '>')
-      if (exprForCurrentBatch instanceof ValueVectorReadExpression)
-        cmpExpressions.add((ValueVectorReadExpression) exprForCurrentBatch);
-      else
-        throw new SchemaChangeException("Invalid expression supplied to MergingReceiver operator");
+        // add materialized field expression to comparison list
+        if (exprForCurrentBatch instanceof ValueVectorReadExpression) {
+          cmpExpressions.get(batchIdx).add((ValueVectorReadExpression) exprForCurrentBatch);
+        }
+        else {
+          throw new SchemaChangeException("Invalid expression supplied to MergingReceiver operator");
+        }
+      }
 
       ++batchIdx;
       fieldsPerBatch = fieldIdx;
-      fieldIdx = 0;
     }
 
-    // write out the incoming vector initialization
+    // write out the incoming vector initialization block
     cg.getSetupBlock().assign(incomingVectors, incomingVectorInit);
 
     ///////////////////////////////////
     // Generate the comparison function
+    //
+    // The generated code compares the fields defined in each logical expression.  The batch index
+    // is supplied by the function caller (at runtime).  The comparison statements for each
+    // expression are generated for each schema change.  Inequality checks (< and >) for each batch
+    // are executed first to minimize comparisons.  Equality is checked only for the last expression,
+    // and only if all previous expressions are equal; e.g.:
+    //
+    // int doCompare(Node left, Node right) {
+    //   if (((BigIntVector) comparisonVectors[left.batchId][0]).get(left.valueIndex) >
+    //       ((BigIntVector) comparisonVectors[right.batchId][0]).get(right.valueIndex))
+    //     return 1;
+    //   if (((BigIntVector) comparisonVectors[left.batchId][0]).get(left.valueIndex) <
+    //       ((BigIntVector) comparisonVectors[right.batchId][0]).get(right.valueIndex))
+    //     return -1;
+    //   if (((BigIntVector) comparisonVectors[left.batchId][1]).get(left.valueIndex) >
+    //       ((BigIntVector) comparisonVectors[right.batchId][1]).get(right.valueIndex))
+    //     return 1;
+    //   if (((BigIntVector) comparisonVectors[left.batchId][1]).get(left.valueIndex) <
+    //       ((BigIntVector) comparisonVectors[right.batchId][1]).get(right.valueIndex))
+    //     return -1;
+    //   return 0;
+    // }
     ///////////////////////////////////
-    cg.setMappingSet(MergingReceiverGeneratorBase.COMPARE_MAPPING);
 
-    // initialize the array of comparison vectors
-    cg.getSetupBlock().assign(comparisonVectors, JExpr.newArray(cg.getModel().ref(ValueVector.class), fieldsPerBatch));
-    int exprIdx = 0;
-    TypeProtos.MajorType cmpType = null; // assumes all comparison fields are the same type
-    for (ValueVectorReadExpression vvRead : cmpExpressions) {
-      cg.getSetupBlock().assign(comparisonVectors.component(JExpr.lit(exprIdx)),
-                                 ((JExpression) incomingBatchesVar.component(JExpr.lit(exprIdx)))
-                                   .invoke("getValueAccessorById")
-                                   .arg(JExpr.lit(vvRead.getFieldId().getFieldId()))
-                                   .arg(cg.getModel()._ref(TypeHelper.getValueVectorClass(vvRead.getMajorType().getMinorType(),
-                                                                                           vvRead.getMajorType().getMode())).boxify().dotclass())
-                                   .invoke("getValueVector"));
-      cmpType = vvRead.getMajorType();
-      ++exprIdx;
+    JArray comparisonVectorInit = JExpr.newArray(cg.getModel().ref(ValueVector.class).array());
+    for (int b = 0; b < cmpExpressions.size(); ++b) {
+      JArray comparisonVectorInitBatch = JExpr.newArray(cg.getModel().ref(ValueVector.class));
+
+      for (ValueVectorReadExpression vvRead : cmpExpressions.get(b)) {
+        TypeProtos.DataMode mode = vvRead.getMajorType().getMode();
+        TypeProtos.MinorType minor = vvRead.getMajorType().getMinorType();
+        Class cmpVectorClass = TypeHelper.getValueVectorClass(minor, mode);
+
+        comparisonVectorInitBatch.add(
+            ((JExpression) incomingBatchesVar.component(JExpr.lit(b)))
+               .invoke("getValueAccessorById")
+                 .arg(JExpr.lit(vvRead.getFieldId().getFieldId()))
+                 .arg(cg.getModel()._ref(cmpVectorClass).boxify().dotclass())
+                   .invoke("getValueVector"));
+
+      }
+      comparisonVectorInit.add(comparisonVectorInitBatch);
     }
 
-    JType vectorType = cg.getModel()._ref(TypeHelper.getValueVectorClass(cmpType.getMinorType(),
-                                                                         cmpType.getMode()));
-    // generate comparison code for nullable/optional vectors
-    if (cmpType.getMode() == TypeProtos.DataMode.OPTIONAL) {
-      // handle null == null
-      cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
-                              .invoke("getAccessor")
-                              .invoke("isSet")
-                                .arg(JExpr.direct("left.valueIndex"))
-                              .eq(JExpr.lit(0))
-                        .cand(((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
-                              .invoke("getAccessor")
-                              .invoke("isSet")
-                                .arg(JExpr.direct("right.valueIndex"))
-                              .eq(JExpr.lit(0))))
-        ._then()
-        ._return(JExpr.lit(0));
+    cg.getSetupBlock().assign(comparisonVectors, comparisonVectorInit);
 
-      // handle  null == !null
-      cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
-                              .invoke("getAccessor")
-                              .invoke("isSet")
-                                .arg(JExpr.direct("left.valueIndex"))
-                              .eq(JExpr.lit(0)))
-        ._then()
-        ._return(JExpr.lit(-1));
+    int comparisonVectorIndex = 0;
+    for (ValueVectorReadExpression vvRead : cmpExpressions.get(0)) {
+      // generate the comparison statements based on the first batch (assumes comparison fields are homogeneous)
+      TypeProtos.DataMode mode = vvRead.getMajorType().getMode();
+      TypeProtos.MinorType minor = vvRead.getMajorType().getMinorType();
+      JType vectorType = cg.getModel()._ref(TypeHelper.getValueVectorClass(minor, mode));
 
-      // handle  !null == null
-      cg.getEvalBlock()._if(((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
-                              .invoke("getAccessor")
-                              .invoke("isSet")
-                                .arg(JExpr.direct("right.valueIndex"))
-                              .eq(JExpr.lit(0)))
-        ._then()
-        ._return(JExpr.lit(1));
+      // generate comparison code for nullable/optional vectors
+      if (mode == TypeProtos.DataMode.OPTIONAL) {
+        // handle null == null
+        cg.getEvalBlock()._if(((JExpression) ((JExpression)
+            comparisonVectors.component(JExpr.direct("left.batchId")))
+                             .component(JExpr.lit(comparisonVectorIndex)))
+                                .invoke("getAccessor")
+                                .invoke("isSet")
+                                  .arg(JExpr.direct("left.valueIndex"))
+                                .eq(JExpr.lit(0))
+                          .cand(((JExpression) ((JExpression)
+            comparisonVectors.component(JExpr.direct("right.batchId")))
+                             .component(JExpr.lit(comparisonVectorIndex)))
+                                .invoke("getAccessor")
+                                .invoke("isSet")
+                                  .arg(JExpr.direct("right.valueIndex"))
+                                .eq(JExpr.lit(0))))
+          ._then()
+          ._return(JExpr.lit(0));
+
+        // handle  null == !null
+        cg.getEvalBlock()._if(((JExpression) ((JExpression)
+            comparisonVectors.component(JExpr.direct("left.batchId")))
+                             .component(JExpr.lit(comparisonVectorIndex)))
+                                .invoke("getAccessor")
+                                .invoke("isSet")
+                                  .arg(JExpr.direct("left.valueIndex"))
+                                .eq(JExpr.lit(0)))
+          ._then()
+          ._return(JExpr.lit(config.getOrderings().get(0).getDirection() == Order.Direction.ASC ? -1 : 1));
+
+        // handle  !null == null
+        cg.getEvalBlock()._if(((JExpression) ((JExpression)
+            comparisonVectors.component(JExpr.direct("right.batchId")))
+                             .component(JExpr.lit(comparisonVectorIndex)))
+                                .invoke("getAccessor")
+                                .invoke("isSet")
+                                  .arg(JExpr.direct("right.valueIndex"))
+                                .eq(JExpr.lit(0)))
+          ._then()
+          ._return(JExpr.lit(config.getOrderings().get(0).getDirection() == Order.Direction.ASC ? 1 : -1));
+      }
+
+      // generate comparison code
+      // less than
+      cg.getEvalBlock()._if(
+          ((JExpression) JExpr.cast(vectorType,
+          ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
+                                          .component(JExpr.lit(comparisonVectorIndex))))
+            .invoke("getAccessor")
+            .invoke("get")
+              .arg(JExpr.direct("left.valueIndex"))
+          .lt(
+               ((JExpression) JExpr.cast(vectorType,
+               ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
+                                               .component(JExpr.lit(comparisonVectorIndex))))
+              .invoke("getAccessor")
+              .invoke("get")
+              .arg(JExpr.direct("right.valueIndex"))))
+          ._then()
+          ._return(
+             JExpr.lit(config.getOrderings().get(comparisonVectorIndex).getDirection() == Order.Direction.ASC ? -1 : 1));
+
+
+      // greater than
+      cg.getEvalBlock()._if(
+          ((JExpression) JExpr.cast(vectorType,
+          ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
+                                          .component(JExpr.lit(comparisonVectorIndex))))
+            .invoke("getAccessor")
+            .invoke("get")
+              .arg(JExpr.direct("left.valueIndex"))
+          .gt(
+               ((JExpression) JExpr.cast(vectorType,
+               ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
+                                               .component(JExpr.lit(comparisonVectorIndex))))
+              .invoke("getAccessor")
+              .invoke("get")
+              .arg(JExpr.direct("right.valueIndex"))))
+          ._then()
+          ._return(
+             JExpr.lit(config.getOrderings().get(comparisonVectorIndex).getDirection() == Order.Direction.ASC ? 1 : -1));
+
+      ++comparisonVectorIndex;
     }
 
-    // generate comparison code
-    // equality
-    cg.getEvalBlock()._if(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))))
-                          .invoke("getAccessor")
-                          .invoke("get")
-                            .arg(JExpr.direct("left.valueIndex"))
-                        .eq(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))))
-                              .invoke("getAccessor")
-                              .invoke("get")
-                              .arg(JExpr.direct("right.valueIndex"))))
-        ._then()
-        ._return(JExpr.lit(0));
-
-    // less than
-    cg.getEvalBlock()._if(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))))
-                          .invoke("getAccessor")
-                          .invoke("get")
-                            .arg(JExpr.direct("left.valueIndex"))
-                        .lt(((JExpression) JExpr.cast(vectorType, ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))))
-                              .invoke("getAccessor")
-                              .invoke("get")
-                              .arg(JExpr.direct("right.valueIndex"))))
-        ._then()
-        ._return(JExpr.lit(-1));
-
-    // greater than
-    cg.getEvalBlock()._return(JExpr.lit(1));
+    // finally, add the equality case
+    cg.getEvalBlock()._return(JExpr.lit(0));
 
     /////////////////////////////////////
     // End comparison function generation
@@ -532,6 +602,7 @@ public class MergingRecordBatch implements RecordBatch {
 
     // generate copy function and setup outgoing batches
     cg.setMappingSet(MergingReceiverGeneratorBase.COPY_MAPPING);
+    int fieldIdx = 0;
     for (VectorWrapper<?> vvOut : outgoingContainer) {
       // declare outgoing value vectors
       JVar outgoingVV = cg.declareVectorValueSetupAndMember("outgoingBatch",
