@@ -85,4 +85,44 @@ public class TestMergingReceiver extends PopUnitTestBase {
     }
   }
 
+  @Test
+  public void handleEmptyBatch() throws Exception {
+    RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
+
+    try(Drillbit bit1 = new Drillbit(CONFIG, serviceSet);
+        Drillbit bit2 = new Drillbit(CONFIG, serviceSet);
+        DrillClient client = new DrillClient(CONFIG, serviceSet.getCoordinator());) {
+
+      bit1.run();
+      bit2.run();
+      client.connect();
+      List<QueryResultBatch> results = client.runQuery(UserProtos.QueryType.PHYSICAL,
+                                                        Files.toString(FileUtils.getResourceAsFile("/mergerecv/empty_batch.json"),
+                                                                        Charsets.UTF_8));
+      int count = 0;
+      RecordBatchLoader batchLoader = new RecordBatchLoader(client.getAllocator());
+      // print the results
+      for(QueryResultBatch b : results) {
+        count += b.getHeader().getRowCount();
+        for (int valueIdx = 0; valueIdx < b.getHeader().getRowCount(); valueIdx++) {
+          List<Object> row = Lists.newArrayList();
+          batchLoader.load(b.getHeader().getDef(), b.getData());
+          for (VectorWrapper vw : batchLoader)
+            row.add(vw.getValueVector().getField().getName() + ":" + vw.getValueVector().getAccessor().getObject(valueIdx));
+          for (Object cell : row) {
+            if (cell == null) {
+              System.out.print("<null>    ");
+              continue;
+            }
+            int len = cell.toString().length();
+            System.out.print(cell + " ");
+            for (int i = 0; i < (30 - len); ++i)
+              System.out.print(" ");
+          }
+          System.out.println();
+        }
+      }
+      assertEquals(100, count);
+    }
+  }
 }
