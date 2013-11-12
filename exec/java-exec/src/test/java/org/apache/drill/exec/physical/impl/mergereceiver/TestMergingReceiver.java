@@ -22,7 +22,6 @@ import java.util.List;
 
 import com.beust.jcommander.internal.Lists;
 import org.apache.drill.common.util.FileUtils;
-import org.apache.drill.exec.cache.VectorWrap;
 import org.apache.drill.exec.client.DrillClient;
 import org.apache.drill.exec.pop.PopUnitTestBase;
 import org.apache.drill.exec.proto.UserProtos;
@@ -31,7 +30,6 @@ import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.rpc.user.QueryResultBatch;
 import org.apache.drill.exec.server.Drillbit;
 import org.apache.drill.exec.server.RemoteServiceSet;
-import org.apache.drill.exec.vector.ValueVector;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -85,6 +83,7 @@ public class TestMergingReceiver extends PopUnitTestBase {
     }
   }
 
+  @Ignore
   @Test
   public void handleEmptyBatch() throws Exception {
     RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();

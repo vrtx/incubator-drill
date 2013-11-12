@@ -46,7 +46,6 @@
             ref: "partition",
             recordsToSample: 15000,
             completionFactor: 0.8
-            ref: "partition"
         },
         {
             @id: 4,
