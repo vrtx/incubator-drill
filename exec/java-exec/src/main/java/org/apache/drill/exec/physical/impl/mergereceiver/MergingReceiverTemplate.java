@@ -42,12 +42,12 @@ public abstract class MergingReceiverTemplate implements MergingReceiverGenerato
 
   /**
    * Enter the generated comparator
-   * @param left  reference to the left-hand value in an incoming vector
-   * @param right reference to the right-hand value in an incoming vector
+   * @param leftNode  reference to the left-hand value and vector
+   * @param rightNode reference to the right-hand value and vector
    * @return
    */
-  public abstract int doCompare(@Named("left") MergingRecordBatch.Node left,
-                                @Named("right") MergingRecordBatch.Node right);
+  public abstract int doCompare(@Named("leftNode") MergingRecordBatch.Node leftNode,
+                                @Named("rightNode") MergingRecordBatch.Node rightNode);
 
   /**
    * Enter the generated copy function
@@ -57,6 +57,6 @@ public abstract class MergingReceiverTemplate implements MergingReceiverGenerato
    */
   public abstract void doCopy(@Named("inBatch") int inBatch, @Named("inIndex") int inIndex, @Named("outIndex") int outIndex);
 
-  public abstract void doEval(@Named("inBatch") int inBatch, @Named("inIndex") int inIndex, @Named("outIndex") int outIndex);
+//  public abstract void doEval(@Named("inBatch") int inBatch, @Named("inIndex") int inIndex, @Named("outIndex") int outIndex);
 
 }
