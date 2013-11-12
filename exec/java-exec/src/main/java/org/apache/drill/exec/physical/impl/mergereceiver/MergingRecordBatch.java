@@ -18,6 +18,7 @@ package org.apache.drill.exec.physical.impl.mergereceiver;
  * limitations under the License.
  */
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.sun.codemodel.JArray;
 import com.sun.codemodel.JClass;
@@ -29,6 +30,8 @@ import com.sun.codemodel.JVar;
 import org.apache.drill.common.defs.OrderDef;
 import org.apache.drill.common.expression.ErrorCollector;
 import org.apache.drill.common.expression.ErrorCollectorImpl;
+import org.apache.drill.common.expression.ExpressionPosition;
+import org.apache.drill.common.expression.FunctionCall;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.common.logical.data.Order;
@@ -37,8 +40,10 @@ import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.CodeGenerator;
 import org.apache.drill.exec.expr.ExpressionTreeMaterializer;
+import org.apache.drill.exec.expr.HoldingContainerExpression;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.expr.ValueVectorReadExpression;
+import org.apache.drill.exec.expr.fn.impl.ComparatorFunctions;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.config.MergingReceiverPOP;
 import org.apache.drill.exec.proto.UserBitShared;
@@ -449,31 +454,13 @@ public class MergingRecordBatch implements RecordBatch {
     // write out the incoming vector initialization block
     cg.getSetupBlock().assign(incomingVectors, incomingVectorInit);
 
-    ///////////////////////////////////
-    // Generate the comparison function
-    //
+    // Generate the comparison function:
     // The generated code compares the fields defined in each logical expression.  The batch index
     // is supplied by the function caller (at runtime).  The comparison statements for each
     // expression are generated for each schema change.  Inequality checks (< and >) for each batch
-    // are executed first to minimize comparisons.  Equality is checked only for the last expression,
-    // and only if all previous expressions are equal; e.g.:
-    //
-    // int doCompare(Node left, Node right) {
-    //   if (((BigIntVector) comparisonVectors[left.batchId][0]).get(left.valueIndex) >
-    //       ((BigIntVector) comparisonVectors[right.batchId][0]).get(right.valueIndex))
-    //     return 1;
-    //   if (((BigIntVector) comparisonVectors[left.batchId][0]).get(left.valueIndex) <
-    //       ((BigIntVector) comparisonVectors[right.batchId][0]).get(right.valueIndex))
-    //     return -1;
-    //   if (((BigIntVector) comparisonVectors[left.batchId][1]).get(left.valueIndex) >
-    //       ((BigIntVector) comparisonVectors[right.batchId][1]).get(right.valueIndex))
-    //     return 1;
-    //   if (((BigIntVector) comparisonVectors[left.batchId][1]).get(left.valueIndex) <
-    //       ((BigIntVector) comparisonVectors[right.batchId][1]).get(right.valueIndex))
-    //     return -1;
-    //   return 0;
-    // }
-    ///////////////////////////////////
+    // are executed first to accommodate multiple expressions.  Equality is checked only for the last
+    // expression, and only if all previous expressions are equal.  Expression order is applied
+    // to the result of the FunctionCall.
 
     JArray comparisonVectorInit = JExpr.newArray(cg.getModel().ref(ValueVector.class).array());
     for (int b = 0; b < cmpExpressions.size(); ++b) {
@@ -503,99 +490,61 @@ public class MergingRecordBatch implements RecordBatch {
       TypeProtos.DataMode mode = vvRead.getMajorType().getMode();
       TypeProtos.MinorType minor = vvRead.getMajorType().getMinorType();
       JType vectorType = cg.getModel()._ref(TypeHelper.getValueVectorClass(minor, mode));
+      JType valueType = TypeHelper.getHolderType(cg.getModel(), minor, mode);
 
-      // generate comparison code for nullable/optional vectors
-      if (mode == TypeProtos.DataMode.OPTIONAL) {
-        // handle null == null
-        cg.getEvalBlock()._if(((JExpression) ((JExpression)
-            comparisonVectors.component(JExpr.direct("left.batchId")))
-                             .component(JExpr.lit(comparisonVectorIndex)))
-                                .invoke("getAccessor")
-                                .invoke("isSet")
-                                  .arg(JExpr.direct("left.valueIndex"))
-                                .eq(JExpr.lit(0))
-                          .cand(((JExpression) ((JExpression)
-            comparisonVectors.component(JExpr.direct("right.batchId")))
-                             .component(JExpr.lit(comparisonVectorIndex)))
-                                .invoke("getAccessor")
-                                .invoke("isSet")
-                                  .arg(JExpr.direct("right.valueIndex"))
-                                .eq(JExpr.lit(0))))
-          ._then()
-          ._return(JExpr.lit(0));
+      // set up a holding container expression for left-hand side of function call
+      JVar leftVar = cg.getEvalBlock().decl(valueType, "leftValue" + comparisonVectorIndex, JExpr._new(valueType));
+      ((JExpression) JExpr.cast(vectorType,
+                                ((JExpression) comparisonVectors
+                                  .component(JExpr.direct("leftNode.batchId")))
+                                  .component(JExpr.lit(comparisonVectorIndex))))
+        .invoke("getAccessor")
+        .invoke("get")
+        .arg(JExpr.direct("leftNode.valueIndex"))
+        .arg(leftVar);
 
-        // handle  null == !null
-        cg.getEvalBlock()._if(((JExpression) ((JExpression)
-            comparisonVectors.component(JExpr.direct("left.batchId")))
-                             .component(JExpr.lit(comparisonVectorIndex)))
-                                .invoke("getAccessor")
-                                .invoke("isSet")
-                                  .arg(JExpr.direct("left.valueIndex"))
-                                .eq(JExpr.lit(0)))
-          ._then()
-          ._return(JExpr.lit(config.getOrderings().get(0).getDirection() == Order.Direction.ASC ? -1 : 1));
+      CodeGenerator.HoldingContainer left = new CodeGenerator.HoldingContainer(vvRead.getMajorType(),
+                                                                               leftVar,
+                                                                               leftVar.ref("value"),
+                                                                               leftVar.ref("isSet"));
 
-        // handle  !null == null
-        cg.getEvalBlock()._if(((JExpression) ((JExpression)
-            comparisonVectors.component(JExpr.direct("right.batchId")))
-                             .component(JExpr.lit(comparisonVectorIndex)))
-                                .invoke("getAccessor")
-                                .invoke("isSet")
-                                  .arg(JExpr.direct("right.valueIndex"))
-                                .eq(JExpr.lit(0)))
-          ._then()
-          ._return(JExpr.lit(config.getOrderings().get(0).getDirection() == Order.Direction.ASC ? 1 : -1));
-      }
+      // set up a holding container expression for right-hand side of function call
+      JVar rightVar = cg.getEvalBlock().decl(valueType, "rightValue" + comparisonVectorIndex, JExpr._new(valueType));
+      ((JExpression) JExpr.cast(vectorType,
+                                ((JExpression) comparisonVectors
+                                  .component(JExpr.direct("rightNode.batchId")))
+                                  .component(JExpr.lit(comparisonVectorIndex))))
+        .invoke("getAccessor")
+        .invoke("get")
+        .arg(JExpr.direct("rightNode.valueIndex"))
+        .arg(rightVar);
 
-      // generate comparison code
-      // less than
-      cg.getEvalBlock()._if(
-          ((JExpression) JExpr.cast(vectorType,
-          ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
-                                          .component(JExpr.lit(comparisonVectorIndex))))
-            .invoke("getAccessor")
-            .invoke("get")
-              .arg(JExpr.direct("left.valueIndex"))
-          .lt(
-               ((JExpression) JExpr.cast(vectorType,
-               ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
-                                               .component(JExpr.lit(comparisonVectorIndex))))
-              .invoke("getAccessor")
-              .invoke("get")
-              .arg(JExpr.direct("right.valueIndex"))))
-          ._then()
-          ._return(
-             JExpr.lit(config.getOrderings().get(comparisonVectorIndex).getDirection() == Order.Direction.ASC ? -1 : 1));
+      CodeGenerator.HoldingContainer right = new CodeGenerator.HoldingContainer(vvRead.getMajorType(),
+                                                                                rightVar,
+                                                                                rightVar.ref("value"),
+                                                                                rightVar.ref("isSet"));
 
+      // generate the comparison function
+      FunctionCall f = new FunctionCall(ComparatorFunctions.COMPARE_TO,
+                                        ImmutableList.of((LogicalExpression) new HoldingContainerExpression(left),
+                                                                             new HoldingContainerExpression(right)),
+                                        ExpressionPosition.UNKNOWN);
+      CodeGenerator.HoldingContainer out = cg.addExpr(f, false);
 
-      // greater than
-      cg.getEvalBlock()._if(
-          ((JExpression) JExpr.cast(vectorType,
-          ((JExpression) comparisonVectors.component(JExpr.direct("left.batchId")))
-                                          .component(JExpr.lit(comparisonVectorIndex))))
-            .invoke("getAccessor")
-            .invoke("get")
-              .arg(JExpr.direct("left.valueIndex"))
-          .gt(
-               ((JExpression) JExpr.cast(vectorType,
-               ((JExpression) comparisonVectors.component(JExpr.direct("right.batchId")))
-                                               .component(JExpr.lit(comparisonVectorIndex))))
-              .invoke("getAccessor")
-              .invoke("get")
-              .arg(JExpr.direct("right.valueIndex"))))
-          ._then()
-          ._return(
-             JExpr.lit(config.getOrderings().get(comparisonVectorIndex).getDirection() == Order.Direction.ASC ? 1 : -1));
+      // generate less than/greater than checks (fixing results for ASCending vs. DESCending)
+      cg.getEvalBlock()._if(out.getValue().eq(JExpr.lit(1)))
+                       ._then()
+                       ._return(JExpr.lit(config.getOrderings().get(comparisonVectorIndex).getDirection() == Order.Direction.ASC ? 1 : -1));
+
+      cg.getEvalBlock()._if(out.getValue().eq(JExpr.lit(-1)))
+                       ._then()
+                       ._return(JExpr.lit(config.getOrderings().get(comparisonVectorIndex).getDirection() == Order.Direction.ASC ? -1 : 1));
 
       ++comparisonVectorIndex;
     }
 
-    // finally, add the equality case
+    // if all expressions are equal, return 0
     cg.getEvalBlock()._return(JExpr.lit(0));
-
-    /////////////////////////////////////
-    // End comparison function generation
-    /////////////////////////////////////
 
     // allocate a new array for outgoing vectors
     cg.getSetupBlock().assign(outgoingVectors, JExpr.newArray(cg.getModel().ref(ValueVector.class), fieldsPerBatch));

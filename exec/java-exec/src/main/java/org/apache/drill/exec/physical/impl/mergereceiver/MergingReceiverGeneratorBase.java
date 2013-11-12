@@ -32,22 +32,20 @@ public interface MergingReceiverGeneratorBase {
                                RecordBatchLoader[] incomingBatchLoaders,
                                RecordBatch outgoing) throws SchemaChangeException;
 
-  public abstract int doCompare(MergingRecordBatch.Node leftBatch,
-                                MergingRecordBatch.Node leftIndex);
+  public abstract int doCompare(MergingRecordBatch.Node left,
+                                MergingRecordBatch.Node right);
 
   public abstract void doCopy(int inBatch, int inIndex, int outIndex);
-
-  public abstract void doEval(int inBatch, int inIndex, int outIndex);
 
   public static TemplateClassDefinition<MergingReceiverGeneratorBase> TEMPLATE_DEFINITION =
       new TemplateClassDefinition<>(MergingReceiverGeneratorBase.class, MergingReceiverTemplate.class);
 
-  public static final MappingSet COMPARE_MAPPING =
+  public final MappingSet COMPARE_MAPPING =
     new MappingSet("left.valueIndex", "right.valueIndex",
       GM("doSetup", "doCompare", null, null),
       GM("doSetup", "doCompare", null, null));
 
-  public static final MappingSet COPY_MAPPING =
+  public final MappingSet COPY_MAPPING =
     new MappingSet("inIndex", "outIndex",
       GM("doSetup", "doCopy", null, null),
       GM("doSetup", "doCopy", null, null));

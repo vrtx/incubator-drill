@@ -13,14 +13,14 @@
       url: "http://apache.org",
       entries:[
         {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
-          {name: "red", type: "BIGINT", mode: "REQUIRED"},
-          {name: "green", type: "BIGINT", mode: "REQUIRED"}
+          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
+          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
+          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
         ]},
         {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
-          {name: "red", type: "BIGINT", mode: "REQUIRED"},
-          {name: "green", type: "BIGINT", mode: "REQUIRED"}
+          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
+          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
+          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
         ]}
       ]
     },
