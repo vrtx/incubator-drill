@@ -89,8 +89,8 @@ public class MergingRecordBatch implements RecordBatch {
   private final int DEFAULT_ALLOC_RECORD_COUNT = 20000;
 
   private int outgoingPosition = 0;
-  private final int senderCount;
-  private final RawFragmentBatch[] incomingBatches;
+  private int senderCount = 0;
+  private RawFragmentBatch[] incomingBatches;
   private int[] batchOffsets;
   private PriorityQueue <Node> pqueue;
   private List<VectorAllocator> allocators;
@@ -103,18 +103,8 @@ public class MergingRecordBatch implements RecordBatch {
     this.fragProviders = fragProviders;
     this.context = context;
     this.config = config;
-    this.senderCount = fragProviders.length;
-
-    this.incomingBatches = new RawFragmentBatch[senderCount];
-    this.batchOffsets = new int[senderCount];
     this.allocators = Lists.newArrayList();
     this.outgoingContainer = new VectorContainer();
-
-    // allocate the incoming record batch loaders (loading happens in next())
-    this.batchLoaders = new RecordBatchLoader[senderCount];
-    for (int i = 0; i < senderCount; ++i)
-      batchLoaders[i] = new RecordBatchLoader(context.getAllocator());
-
   }
 
   @Override
@@ -138,12 +128,23 @@ public class MergingRecordBatch implements RecordBatch {
     // lazy initialization
     if (!hasRun) {
       schemaChanged = true; // first iteration is always a schema change
-      
-      // set up each incoming record batch
-      int batchCount = 0;
+
+      // set up each (non-empty) incoming record batch
+      List<RawFragmentBatch> rawBatches = Lists.newArrayList();
       for (RawFragmentBatchProvider provider : fragProviders) {
-        incomingBatches[batchCount] = provider.getNext();
-        ++batchCount;
+        RawFragmentBatch rawBatch = provider.getNext();
+        if (rawBatch.getHeader().getDef().getRecordCount() != 0)
+          rawBatches.add(rawBatch);
+      }
+
+      // allocate the incoming record batch loaders
+      senderCount = rawBatches.size();
+      incomingBatches = new RawFragmentBatch[senderCount];
+      batchOffsets = new int[senderCount];
+      batchLoaders = new RecordBatchLoader[senderCount];
+      for (int i = 0; i < senderCount; ++i) {
+        incomingBatches[i] = rawBatches.get(i);
+        batchLoaders[i] = new RecordBatchLoader(context.getAllocator());
       }
 
       int i = 0;
@@ -205,7 +206,7 @@ public class MergingRecordBatch implements RecordBatch {
       });
 
       // populate the priority queue with initial values
-      for (int b = 0; b < batchCount; ++b)
+      for (int b = 0; b < senderCount; ++b)
         pqueue.add(new Node(b, 0));
 
       hasRun = true;
@@ -227,7 +228,8 @@ public class MergingRecordBatch implements RecordBatch {
         // reached the end of an incoming record batch
         incomingBatches[node.batchId] = fragProviders[node.batchId].getNext();
 
-        if (incomingBatches[node.batchId].getHeader().getIsLastBatch()) {
+        if (incomingBatches[node.batchId].getHeader().getIsLastBatch() ||
+            incomingBatches[node.batchId].getHeader().getDef().getRecordCount() == 0) {
           // batch is empty
           incomingBatches[node.batchId].release();
           boolean allBatchesEmpty = true;

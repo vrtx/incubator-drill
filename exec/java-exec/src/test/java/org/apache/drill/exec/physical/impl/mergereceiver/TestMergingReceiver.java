@@ -83,7 +83,6 @@ public class TestMergingReceiver extends PopUnitTestBase {
     }
   }
 
-  @Ignore
   @Test
   public void handleEmptyBatch() throws Exception {
     RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
