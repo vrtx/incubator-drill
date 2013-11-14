@@ -37,6 +37,7 @@ import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 
 public class TestMergingReceiver extends PopUnitTestBase {
@@ -84,7 +85,7 @@ public class TestMergingReceiver extends PopUnitTestBase {
   }
 
   @Test
-  public void testMultipleProviders() throws Exception {
+  public void testMultipleProvidersMixedSizes() throws Exception {
     RemoteServiceSet serviceSet = RemoteServiceSet.getLocalServiceSet();
 
     try(Drillbit bit1 = new Drillbit(CONFIG, serviceSet);
@@ -100,18 +101,23 @@ public class TestMergingReceiver extends PopUnitTestBase {
       int count = 0;
       RecordBatchLoader batchLoader = new RecordBatchLoader(client.getAllocator());
       // print the results
+      Long lastBlueValue = null;
       for(QueryResultBatch b : results) {
         count += b.getHeader().getRowCount();
         for (int valueIdx = 0; valueIdx < b.getHeader().getRowCount(); valueIdx++) {
           List<Object> row = Lists.newArrayList();
           batchLoader.load(b.getHeader().getDef(), b.getData());
-          for (VectorWrapper vw : batchLoader)
+          for (VectorWrapper vw : batchLoader) {
             row.add(vw.getValueVector().getField().getName() + ":" + vw.getValueVector().getAccessor().getObject(valueIdx));
-          for (Object cell : row) {
-            if (cell == null) {
-              System.out.print("<null>    ");
-              continue;
+            if (vw.getValueVector().getField().getName().equals("blue")) {
+              // assert order is ascending
+              if (((Long)vw.getValueVector().getAccessor().getObject(valueIdx)).longValue() == 0) continue; // ignore initial 0's from sort
+              if (lastBlueValue != null)
+                assertTrue(((Long)vw.getValueVector().getAccessor().getObject(valueIdx)).longValue() >= ((Long)lastBlueValue).longValue());
+              lastBlueValue = (Long)vw.getValueVector().getAccessor().getObject(valueIdx);
             }
+          }
+          for (Object cell : row) {
             int len = cell.toString().length();
             System.out.print(cell + " ");
             for (int i = 0; i < (30 - len); ++i)
@@ -120,7 +126,7 @@ public class TestMergingReceiver extends PopUnitTestBase {
           System.out.println();
         }
       }
-      assertEquals(500, count);
+      assertEquals(400, count);
     }
   }
 

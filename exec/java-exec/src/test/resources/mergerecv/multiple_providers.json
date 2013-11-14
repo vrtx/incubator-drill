@@ -13,29 +13,29 @@
       url: "http://apache.org",
       entries:[
         {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
+          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
+          {name: "red", type: "BIGINT", mode: "REQUIRED"},
+          {name: "green", type: "BIGINT", mode: "REQUIRED"}
         ]},
-        {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
+        {records: 90, types: [
+          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
+          {name: "red", type: "BIGINT", mode: "REQUIRED"},
+          {name: "green", type: "BIGINT", mode: "REQUIRED"}
         ]},
-        {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
+        {records: 80, types: [
+          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
+          {name: "red", type: "BIGINT", mode: "REQUIRED"},
+          {name: "green", type: "BIGINT", mode: "REQUIRED"}
         ]},
-        {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
+        {records: 70, types: [
+          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
+          {name: "red", type: "BIGINT", mode: "REQUIRED"},
+          {name: "green", type: "BIGINT", mode: "REQUIRED"}
         ]},
-        {records: 100, types: [
-          {name: "blue", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "red", type: "BIGINT", mode: "OPTIONAL"},
-          {name: "green", type: "BIGINT", mode: "OPTIONAL"}
+        {records: 60, types: [
+          {name: "blue", type: "BIGINT", mode: "REQUIRED"},
+          {name: "red", type: "BIGINT", mode: "REQUIRED"},
+          {name: "green", type: "BIGINT", mode: "REQUIRED"}
         ]}
       ]
     },
@@ -43,7 +43,7 @@
       @id: 2,
       child: 1,
       pop: "sort",
-      orderings: [ {expr: "blue", order:"DESC"},  {expr: "red", order:"DESC"} ]
+      orderings: [ {expr: "blue", order:"ASC"},  {expr: "red", order:"ASC"} ]
     },
     {
       @id: 3,
@@ -54,7 +54,7 @@
       @id: 4,
       child: 3,
       pop: "single-merge-exchange",
-      orderings: [ {expr: "blue", order:"DESC"},  {expr: "red", order:"DESC"}  ]
+      orderings: [ {expr: "blue", order:"ASC"},  {expr: "red", order:"ASC"}  ]
     },
     {
       @id: 5,

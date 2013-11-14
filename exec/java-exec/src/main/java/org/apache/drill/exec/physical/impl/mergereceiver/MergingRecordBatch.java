@@ -496,14 +496,14 @@ public class MergingRecordBatch implements RecordBatch {
 
       // set up a holding container expression for left-hand side of function call
       JVar leftVar = cg.getEvalBlock().decl(valueType, "leftValue" + comparisonVectorIndex, JExpr._new(valueType));
-      ((JExpression) JExpr.cast(vectorType,
+      cg.getEvalBlock().add(((JExpression) JExpr.cast(vectorType,
                                 ((JExpression) comparisonVectors
                                   .component(JExpr.direct("leftNode.batchId")))
                                   .component(JExpr.lit(comparisonVectorIndex))))
         .invoke("getAccessor")
         .invoke("get")
         .arg(JExpr.direct("leftNode.valueIndex"))
-        .arg(leftVar);
+        .arg(leftVar));
 
       CodeGenerator.HoldingContainer left = new CodeGenerator.HoldingContainer(vvRead.getMajorType(),
                                                                                leftVar,
@@ -512,14 +512,14 @@ public class MergingRecordBatch implements RecordBatch {
 
       // set up a holding container expression for right-hand side of function call
       JVar rightVar = cg.getEvalBlock().decl(valueType, "rightValue" + comparisonVectorIndex, JExpr._new(valueType));
-      ((JExpression) JExpr.cast(vectorType,
+      cg.getEvalBlock().add(((JExpression) JExpr.cast(vectorType,
                                 ((JExpression) comparisonVectors
-                                  .component(JExpr.direct("rightNode.batchId")))
-                                  .component(JExpr.lit(comparisonVectorIndex))))
+                                    .component(JExpr.direct("rightNode.batchId")))
+                                    .component(JExpr.lit(comparisonVectorIndex))))
         .invoke("getAccessor")
         .invoke("get")
         .arg(JExpr.direct("rightNode.valueIndex"))
-        .arg(rightVar);
+        .arg(rightVar));
 
       CodeGenerator.HoldingContainer right = new CodeGenerator.HoldingContainer(vvRead.getMajorType(),
                                                                                 rightVar,
